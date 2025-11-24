@@ -22,18 +22,19 @@
                         }
                     },
                     fontFamily: {
-                        sans: ['Plus Jakarta Sans', 'sans-serif'], // More modern font
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
                     },
                     boxShadow: {
                         'soft': '0 10px 40px -10px rgba(0,0,0,0.08)',
-                        'glow': '0 0 20px rgba(16, 185, 129, 0.3)'
+                        'glow': '0 0 20px rgba(16, 185, 129, 0.3)',
+                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)'
                     }
                 }
             }
         }
     </script>
     
-    <!-- React & ReactDOM & Babel -->
+    <!-- React & Babel -->
     <script type="importmap">
     {
       "imports": {
@@ -55,27 +56,19 @@
             -webkit-tap-highlight-color: transparent;
             background-color: #f8fafc;
         }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fadeIn { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 1rem); }
         
-        /* Hide Scrollbar but keep functionality */
+        /* Smooth Fade In */
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(10px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        .animate-fadeIn { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        
+        /* Hide Scrollbar */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none;  scrollbar-width: none; }
         
-        /* Glass Effect Utilities */
-        .glass {
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        .glass-dark {
-            background: rgba(2, 44, 34, 0.85);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 1rem); }
     </style>
 </head>
 <body class="bg-slate-50 h-[100dvh] w-screen overflow-hidden text-slate-800">
@@ -92,19 +85,12 @@
           LayoutGrid, Hexagon, Sparkles 
         } from 'lucide-react';
 
-        // --- Google Apps Script Template (For Admin Reference) ---
         const APPS_SCRIPT_TEMPLATE = `/* See Code.gs for full content */`;
 
         function LeavePortal() {
-          // --- Configuration ---
-          const DEPARTMENTS = [
-            "Brokerage", "Safety", "Local", "Inbound Custom", 
-            "Accounting", "Outbound", "Warehouse"
-          ];
+          const DEPARTMENTS = ["Brokerage", "Safety", "Local", "Inbound Custom", "Accounting", "Outbound", "Warehouse"];
+          const DEFAULT_LIMITS = { 'Sick Leave': 10, 'Casual Leave': 12, 'Earned Leave': 15 };
 
-          const LEAVE_LIMITS = { 'Sick Leave': 10, 'Casual Leave': 12, 'Earned Leave': 15 };
-
-          // --- State ---
           const [view, setView] = useState('login'); 
           const [currentUser, setCurrentUser] = useState(null);
           const [activeTab, setActiveTab] = useState('dashboard');
@@ -112,7 +98,6 @@
           const [leaves, setLeaves] = useState([]);
           const [allUsers, setAllUsers] = useState([]); 
           
-          // --- HARDCODED LINK ---
           const [scriptUrl, setScriptUrl] = useState('https://script.google.com/macros/s/AKfycbywHdk55GxXQ_FPDdhZEJaalMnqYkBZmRbxFpCMuYzZNNbd_cqAiuxFsaSdsHtTLvLz/exec');
           
           const [isLoading, setIsLoading] = useState(false);
@@ -121,13 +106,11 @@
           const [password, setPassword] = useState('');
           const [isLoginLoading, setIsLoginLoading] = useState(false);
 
-          // Modals State
+          // Modals & Features
           const [editingUser, setEditingUser] = useState(null); 
           const [allocations, setAllocations] = useState({ sick: 0, casual: 0, earned: 0 });
           const [actionModal, setActionModal] = useState(null); 
           const [adminMessage, setAdminMessage] = useState('');
-
-          // Notification State
           const [inAppNotifs, setInAppNotifs] = useState([]);
           const [showNotifPanel, setShowNotifPanel] = useState(false);
           const prevLeavesRef = useRef([]); 
@@ -140,7 +123,7 @@
             reason: ''
           });
 
-          // --- Time Greeting ---
+          // Time Greeting
           const getGreeting = () => {
             const hour = new Date().getHours();
             if (hour < 12) return "Good Morning";
@@ -148,34 +131,20 @@
             return "Good Evening";
           };
 
-          // --- iOS Optimization ---
           useEffect(() => {
-            const meta1 = document.createElement('meta');
-            meta1.name = "apple-mobile-web-app-capable";
-            meta1.content = "yes";
-            document.head.appendChild(meta1);
+            // Full Screen iOS
+            const meta1 = document.createElement('meta'); meta1.name = "apple-mobile-web-app-capable"; meta1.content = "yes"; document.head.appendChild(meta1);
+            const meta2 = document.createElement('meta'); meta2.name = "apple-mobile-web-app-status-bar-style"; meta2.content = "black-translucent"; document.head.appendChild(meta2);
             
-            // Changed status bar to match the dark header
-            const meta2 = document.createElement('meta');
-            meta2.name = "apple-mobile-web-app-status-bar-style";
-            meta2.content = "black-translucent";
-            document.head.appendChild(meta2);
+            if ("Notification" in window && Notification.permission !== "granted") Notification.requestPermission();
             
-            if ("Notification" in window && Notification.permission !== "granted") {
-                Notification.requestPermission();
-            }
-          }, []);
-
-          useEffect(() => {
             const savedUrl = localStorage.getItem('google_script_url_v2');
             if (savedUrl) setScriptUrl(savedUrl);
             const savedNotifs = localStorage.getItem('leave_app_notifications');
             if (savedNotifs) setInAppNotifs(JSON.parse(savedNotifs));
           }, []);
 
-          useEffect(() => {
-            localStorage.setItem('leave_app_notifications', JSON.stringify(inAppNotifs));
-          }, [inAppNotifs]);
+          useEffect(() => { localStorage.setItem('leave_app_notifications', JSON.stringify(inAppNotifs)); }, [inAppNotifs]);
 
           useEffect(() => {
             if (view !== 'login' && scriptUrl) {
@@ -186,316 +155,132 @@
             }
           }, [view, scriptUrl, currentUser]);
 
-          // --- SMART NOTIFICATION LOGIC ---
+          // Notification Logic
           useEffect(() => {
-            if (leaves.length === 0) return;
-            if (prevLeavesRef.current.length === 0) {
-                prevLeavesRef.current = leaves;
-                return;
-            }
-
+            if (leaves.length === 0 || prevLeavesRef.current.length === 0) { prevLeavesRef.current = leaves; return; }
             const newNotifs = [];
 
             if (currentUser?.role === 'admin') {
-                const getPendingCount = (list) => list.filter(l => 
-                    l.status === 'Pending' && 
-                    (currentUser.department === 'All' || l.department === currentUser.department)
-                ).length;
-
-                const prevPending = getPendingCount(prevLeavesRef.current);
-                const currPending = getPendingCount(leaves);
-
-                if (currPending > prevPending) {
-                    newNotifs.push({
-                        id: Date.now(),
-                        title: "New Request",
-                        msg: "An employee has applied for leave.",
-                        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        read: false
-                    });
+                const getPendingCount = (list) => list.filter(l => l.status === 'Pending' && (currentUser.department === 'All' || l.department === currentUser.department)).length;
+                if (getPendingCount(leaves) > getPendingCount(prevLeavesRef.current)) {
+                    newNotifs.push({ id: Date.now(), title: "New Request", msg: "An employee applied for leave.", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), read: false });
                     showToast("🔔 New Leave Request!", "success");
                 }
             }
 
             if (currentUser?.role === 'user') {
                 const myCurrentLeaves = leaves.filter(l => l.email === currentUser.email);
-                
                 myCurrentLeaves.forEach(currLeave => {
                     const prevLeave = prevLeavesRef.current.find(p => p.id === currLeave.id);
                     if (prevLeave && prevLeave.status === 'Pending' && currLeave.status !== 'Pending') {
                         const isApproved = currLeave.status === 'Approved';
-                        newNotifs.push({
-                            id: Date.now() + Math.random(),
-                            title: isApproved ? "Leave Approved" : "Leave Rejected",
-                            msg: `Your ${currLeave.leaveType} request was ${currLeave.status}.`,
-                            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                            read: false,
-                            type: isApproved ? 'success' : 'error'
-                        });
+                        newNotifs.push({ id: Date.now() + Math.random(), title: isApproved ? "Leave Approved" : "Leave Rejected", msg: `Your ${currLeave.leaveType} was ${currLeave.status}.`, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), read: false, type: isApproved ? 'success' : 'error' });
                         showToast(isApproved ? "🎉 Approved!" : "⚠️ Update Received");
                     }
                 });
             }
-
-            if (newNotifs.length > 0) {
-                setInAppNotifs(prev => [...newNotifs, ...prev]);
-            }
-
+            if (newNotifs.length > 0) setInAppNotifs(prev => [...newNotifs, ...prev]);
             prevLeavesRef.current = leaves;
           }, [leaves, currentUser]);
 
-          const showToast = (msg, type = 'success') => {
-            setNotification({ msg, type });
-            setTimeout(() => setNotification(null), 4000);
-          };
-
-          const getDaysDiff = (start, end) => {
-            const date1 = new Date(start);
-            const date2 = new Date(end);
-            const diffTime = Math.abs(date2 - date1);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
-            return diffDays || 0;
-          };
+          const showToast = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 4000); };
+          const getDaysDiff = (start, end) => { const d1 = new Date(start); const d2 = new Date(end); return Math.ceil(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24)) + 1 || 0; };
 
           const getLeaveStats = () => {
             const stats = { 'Sick Leave': 0, 'Casual Leave': 0, 'Earned Leave': 0 };
-            leaves
-              .filter(l => l.email === currentUser.email && l.status === 'Approved')
-              .forEach(l => {
-                const days = getDaysDiff(l.startDate, l.endDate);
-                if (stats[l.leaveType] !== undefined) stats[l.leaveType] += days;
-              });
+            leaves.filter(l => l.email === currentUser.email && l.status === 'Approved').forEach(l => {
+                if (stats[l.leaveType] !== undefined) stats[l.leaveType] += getDaysDiff(l.startDate, l.endDate);
+            });
             return stats;
           };
 
-          // --- API Actions ---
-          const fetchUsersList = async () => {
-             try {
-                const response = await fetch(scriptUrl + "?action=users");
-                const result = await response.json();
-                if (result.status === 'success') setAllUsers(result.data);
-             } catch (e) { console.error(e); }
-          };
-
-          const fetchLeaves = async (silent = false) => {
-            if (!scriptUrl) return;
-            if (!silent) setIsLoading(true);
-            try {
-              const response = await fetch(scriptUrl);
-              const result = await response.json();
-              if (result.status === 'success') setLeaves(result.data);
-            } catch (error) {
-              if (!silent) showToast("Sync Error", "error");
-            } finally {
-              if (!silent) setIsLoading(false);
-            }
-          };
+          const fetchUsersList = async () => { try { const r = await fetch(scriptUrl + "?action=users"); const d = await r.json(); if (d.status === 'success') setAllUsers(d.data); } catch (e) {} };
+          const fetchLeaves = async (silent = false) => { if (!scriptUrl) return; if (!silent) setIsLoading(true); try { const r = await fetch(scriptUrl); const d = await r.json(); if (d.status === 'success') setLeaves(d.data); } catch (e) { if(!silent) showToast("Sync Error", "error"); } finally { if (!silent) setIsLoading(false); } };
 
           const handleLogin = async (e) => {
-            e.preventDefault();
-            setIsLoginLoading(true);
-            if (!scriptUrl) {
-              showToast("System Error: Database URL missing.", "error");
-              setIsLoginLoading(false);
-              return;
-            }
+            e.preventDefault(); setIsLoginLoading(true);
+            if (!scriptUrl) { showToast("Database URL missing.", "error"); setIsLoginLoading(false); return; }
             try {
-                const response = await fetch(scriptUrl + "?action=users");
-                const result = await response.json();
-                if (result.status === 'success') {
-                    const users = result.data;
-                    const foundUser = users.find(u => 
-                        String(u.email).toLowerCase() === String(email).toLowerCase() && 
-                        String(u.password) === String(password)
-                    );
-                    if (foundUser) {
-                        setCurrentUser({ 
-                            name: foundUser.name, 
-                            email: foundUser.email, 
-                            role: foundUser.role, 
-                            department: foundUser.department || 'All',
-                            limits: foundUser.limits
-                        });
-                        setView(foundUser.role === 'admin' ? 'admin' : 'user');
-                        setActiveTab('dashboard');
-                    } else {
-                        showToast("Invalid Email or Password", "error");
-                    }
-                } else {
-                    showToast("Database Error", "error");
-                }
-            } catch (error) {
-                showToast("Connection Failed", "error");
-            } finally {
-                setIsLoginLoading(false);
-            }
+                const r = await fetch(scriptUrl + "?action=users"); const d = await r.json();
+                if (d.status === 'success') {
+                    const u = d.data.find(u => String(u.email).toLowerCase() === String(email).toLowerCase() && String(u.password) === String(password));
+                    if (u) {
+                        setCurrentUser({ name: u.name, email: u.email, role: u.role, department: u.department || 'All', limits: u.limits });
+                        setView(u.role === 'admin' ? 'admin' : 'user'); setActiveTab('dashboard');
+                    } else showToast("Invalid Credentials", "error");
+                } else showToast("Database Error", "error");
+            } catch (error) { showToast("Connection Failed", "error"); } finally { setIsLoginLoading(false); }
           };
 
-          const handleLogout = () => {
-            setCurrentUser(null);
-            setView('login');
-            setEmail('');
-            setPassword('');
-            setInAppNotifs([]);
-          };
+          const handleLogout = () => { setCurrentUser(null); setView('login'); setEmail(''); setPassword(''); setInAppNotifs([]); };
 
           const handleApply = async (e) => {
             e.preventDefault();
-            if (!scriptUrl) return showToast("Contact Admin", "error");
-
-            const daysRequested = getDaysDiff(formData.startDate, formData.endDate);
+            const days = getDaysDiff(formData.startDate, formData.endDate);
             const stats = getLeaveStats();
-            const currentUsed = stats[formData.leaveType] || 0;
-            const userLimit = currentUser.limits 
-                ? (formData.leaveType === 'Sick Leave' ? currentUser.limits.sick :
-                   formData.leaveType === 'Casual Leave' ? currentUser.limits.casual : 
-                   currentUser.limits.earned)
-                : DEFAULT_LIMITS[formData.leaveType];
+            const limit = currentUser.limits ? (formData.leaveType === 'Sick Leave' ? currentUser.limits.sick : formData.leaveType === 'Casual Leave' ? currentUser.limits.casual : currentUser.limits.earned) : DEFAULT_LIMITS[formData.leaveType];
+            const used = stats[formData.leaveType] || 0;
 
-            if (currentUsed + daysRequested > userLimit) {
-              return showToast(`Insufficient Balance! Limit: ${userLimit}`, 'error');
-            }
+            if (used + days > limit) return showToast(`Insufficient Balance! Limit: ${limit}`, 'error');
 
             setIsLoading(true);
-            const newId = 'L' + Date.now();
-            const payload = {
-              action: 'apply',
-              id: newId,
-              name: currentUser.name,
-              email: currentUser.email,
-              department: currentUser.department,
-              ...formData
-            };
-
             try {
-              await fetch(scriptUrl, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-              });
-              setLeaves([{ ...payload, status: 'Pending', timestamp: new Date() }, ...leaves]);
-              setFormData({ department: currentUser.department, leaveType: 'Sick Leave', startDate: '', endDate: '', reason: '' });
-              setActiveTab('history');
-              showToast("Application Sent!");
-              fetchLeaves(true);
-            } catch (error) {
-              showToast("Network Error", "error");
-            } finally {
-              setIsLoading(false);
-            }
+              await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'apply', id: 'L' + Date.now(), name: currentUser.name, email: currentUser.email, department: currentUser.department, ...formData }) });
+              setFormData({ ...formData, reason: '', startDate: '', endDate: '' });
+              setActiveTab('history'); showToast("Application Sent!"); fetchLeaves(true);
+            } catch (error) { showToast("Network Error", "error"); } finally { setIsLoading(false); }
           };
 
-          const initiateAdminAction = (id, status) => {
-              setActionModal({ id, status });
-              setAdminMessage('');
-          };
-
+          const initiateAdminAction = (id, status) => { setActionModal({ id, status }); setAdminMessage(''); };
           const confirmAdminAction = async () => {
-            if (!scriptUrl || !actionModal) return;
-            const { id, status } = actionModal;
-            const updatedLeaves = leaves.map(l => l.id === id ? { ...l, status, adminMessage } : l);
-            setLeaves(updatedLeaves); 
+            if (!actionModal) return;
+            setLeaves(leaves.map(l => l.id === actionModal.id ? { ...l, status: actionModal.status, adminMessage } : l));
             setActionModal(null);
-
-            try {
-              await fetch(scriptUrl, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'update', id, status, message: adminMessage })
-              });
-              showToast(`Request ${status}`);
-            } catch (error) {
-              showToast("Failed to sync", "error");
-            }
+            try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: actionModal.id, status: actionModal.status, message: adminMessage }) }); showToast(`Request ${actionModal.status}`); } catch (e) { showToast("Failed to sync", "error"); }
           };
 
           const handleSaveAllocation = async () => {
-             if(!editingUser) return;
-             setIsLoading(true);
+             if(!editingUser) return; setIsLoading(true);
              try {
-                await fetch(scriptUrl, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'update_user_quota', 
-                        email: editingUser.email,
-                        sick: allocations.sick,
-                        casual: allocations.casual,
-                        earned: allocations.earned
-                    })
-                });
+                await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_user_quota', email: editingUser.email, ...allocations }) });
                 showToast("Quotas Updated!");
-                const updatedUsers = allUsers.map(u => 
-                    u.email === editingUser.email ? {...u, limits: allocations} : u
-                );
-                setAllUsers(updatedUsers);
-                setEditingUser(null);
-             } catch (e) {
-                 showToast("Update Failed", "error");
-             } finally {
-                 setIsLoading(false);
-             }
+                setAllUsers(allUsers.map(u => u.email === editingUser.email ? {...u, limits: allocations} : u)); setEditingUser(null);
+             } catch (e) { showToast("Update Failed", "error"); } finally { setIsLoading(false); }
           };
 
-          const openAllocationModal = (user) => {
-              setEditingUser(user);
-              setAllocations(user.limits || { sick: 10, casual: 12, earned: 15 });
-          };
-
-          const getDepartmentLeaves = () => {
-            if (!currentUser) return [];
-            return leaves.filter(l => {
-              return currentUser.department === 'All' || l.department === currentUser.department;
-            });
-          };
-
-          const deptLeaves = getDepartmentLeaves();
-          const pendingCount = deptLeaves.filter(l => l.status === 'Pending').length;
-          const approvedCount = deptLeaves.filter(l => l.status === 'Approved').length;
-          const rejectedCount = deptLeaves.filter(l => l.status === 'Rejected').length;
-          const displayedLeaves = deptLeaves.filter(l => l.status === adminSubTab);
-
-          const unreadCount = inAppNotifs.filter(n => !n.read).length;
-
-          const markNotificationsRead = () => {
-              setShowNotifPanel(!showNotifPanel);
-              if (!showNotifPanel && unreadCount > 0) {
-                  const updated = inAppNotifs.map(n => ({...n, read: true}));
-                  setInAppNotifs(updated);
-              }
-          };
-
-          const clearNotifications = () => {
-              setInAppNotifs([]);
-              localStorage.removeItem('leave_app_notifications');
+          const getFilteredLeavesForAdmin = () => {
+             const deptLeaves = leaves.filter(l => currentUser.department === 'All' || l.department === currentUser.department);
+             return { 
+                 pending: deptLeaves.filter(l => l.status === 'Pending').length,
+                 approved: deptLeaves.filter(l => l.status === 'Approved').length,
+                 rejected: deptLeaves.filter(l => l.status === 'Rejected').length,
+                 list: deptLeaves.filter(l => l.status === adminSubTab)
+             };
           };
 
           // --- Components ---
+          
           const BalanceCard = ({ type, used, total, icon: Icon, colorClass, bgClass, barClass }) => {
             const remaining = total - used;
-            const percent = (used / total) * 100;
-            
+            const percent = Math.min((used / total) * 100, 100);
             return (
-              <div className="bg-white p-5 rounded-[2rem] shadow-soft border border-white/50 relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300 min-w-[160px] shrink-0 snap-center">
-                <div className={`absolute -right-4 -top-4 p-4 opacity-5 ${colorClass} transform group-hover:scale-110 transition-transform duration-500`}>
-                  <Icon size={80} />
+              <div className="bg-white p-4 rounded-[1.5rem] shadow-soft border border-white/50 relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300 min-w-[130px] shrink-0 snap-center">
+                <div className={`absolute -right-3 -top-3 p-2 opacity-5 ${colorClass} transform group-hover:scale-110 transition-transform duration-500`}>
+                  <Icon size={60} />
                 </div>
-                <div className="flex justify-between items-start mb-4 relative z-10">
+                <div className="flex justify-between items-start mb-3 relative z-10">
                   <div>
-                    <div className={`h-10 w-10 rounded-2xl flex items-center justify-center mb-3 ${bgClass} ${colorClass}`}>
-                        <Icon size={20} />
+                    <div className={`h-8 w-8 rounded-xl flex items-center justify-center mb-2 ${bgClass} ${colorClass}`}>
+                        <Icon size={16} />
                     </div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{type}</p>
-                    <h3 className="text-3xl font-extrabold text-slate-800 mt-0.5">{remaining}</h3>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{type}</p>
+                    <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">{remaining}</h3>
                   </div>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
-                  <div className={`h-1.5 rounded-full ${barClass}`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
+                <div className="w-full bg-slate-100 rounded-full h-1 mt-1 overflow-hidden">
+                  <div className={`h-1 rounded-full ${barClass}`} style={{ width: `${percent}%` }}></div>
                 </div>
-                <p className="text-[10px] text-right mt-2 text-slate-400 font-medium">{used} / {total} Used</p>
+                <p className="text-[9px] text-right mt-1.5 text-slate-400 font-medium">{used} / {total} Used</p>
               </div>
             );
           };
@@ -575,288 +360,137 @@
             </button>
           );
 
-          // --- VIEW 1: LOGIN ---
+          // --- VIEW: LOGIN ---
           if (view === 'login') {
             return (
               <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden">
-                {/* Animated Background blobs */}
-                <div className="absolute top-0 left-0 w-full h-1/2 bg-vantage-900 rounded-b-[3rem] z-0"></div>
-                <div className="absolute top-20 right-10 w-64 h-64 bg-vantage-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse z-0"></div>
-                <div className="absolute top-20 left-10 w-64 h-64 bg-emerald-400 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse z-0" style={{animationDelay: '1s'}}></div>
+                {/* Background Elements */}
+                <div className="absolute top-0 left-0 w-full h-3/5 bg-vantage-900 rounded-b-[4rem] z-0 shadow-2xl"></div>
+                <div className="absolute top-20 right-10 w-72 h-72 bg-vantage-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse z-0"></div>
+                <div className="absolute top-40 left-[-50px] w-64 h-64 bg-emerald-400 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-pulse z-0"></div>
 
                 {notification && <div className="absolute top-10 bg-rose-500 text-white px-6 py-3 rounded-full shadow-xl animate-bounce z-50 text-sm font-medium flex items-center gap-2"><AlertCircle size={16}/> {notification.msg}</div>}
                 
-                <div className="w-full max-w-sm bg-white/90 backdrop-blur-xl rounded-[2.5rem] shadow-2xl shadow-vantage-900/20 overflow-hidden border border-white z-10">
+                <div className="w-full max-w-sm bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden border border-white/60 z-10">
                   <div className="p-8 pt-12 text-center">
-                    <div className="w-20 h-20 bg-gradient-to-tr from-vantage-800 to-vantage-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-vantage-900/20 transform rotate-3 hover:rotate-6 transition-transform duration-500">
-                        <Hexagon className="text-white fill-white/20" size={40} strokeWidth={1.5} />
+                    <div className="w-24 h-24 bg-gradient-to-br from-vantage-800 to-vantage-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-vantage-900/30 transform rotate-6">
+                        <Hexagon className="text-white fill-white/10" size={48} strokeWidth={1.5} />
                     </div>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-1">Vantage</h1>
-                    <p className="text-slate-500 text-sm font-medium">Employee Portal</p>
+                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1">Vantage</h1>
+                    <p className="text-slate-500 text-sm font-medium tracking-wide">Employee Portal</p>
                   </div>
-
                   <div className="p-8 pt-2">
                     <form onSubmit={handleLogin} className="space-y-5">
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">Work Email</label>
-                            <div className="relative group">
-                                <User className="absolute left-4 top-4 text-slate-400 group-focus-within:text-vantage-600 transition-colors" size={20} />
-                                <input 
-                                    type="email" 
-                                    required 
-                                    placeholder="name@vantage.com" 
-                                    value={email} 
-                                    onChange={(e) => setEmail(e.target.value)} 
-                                    className="w-full pl-12 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" 
-                                />
-                            </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">Password</label>
-                            <div className="relative group">
-                                <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-vantage-600 transition-colors" size={20} />
-                                <input 
-                                    type="password" 
-                                    required 
-                                    placeholder="••••••••" 
-                                    value={password} 
-                                    onChange={(e) => setPassword(e.target.value)} 
-                                    className="w-full pl-12 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" 
-                                />
-                            </div>
-                        </div>
-
-                        <button 
-                            disabled={isLoginLoading} 
-                            className="w-full bg-vantage-900 text-white py-4.5 rounded-2xl font-bold text-sm shadow-xl shadow-vantage-900/20 hover:bg-vantage-800 hover:scale-[1.02] active:scale-95 transition-all mt-4 flex items-center justify-center gap-2"
-                        >
-                            {isLoginLoading ? <RefreshCw className="animate-spin" size={20}/> : 'Secure Login'}
-                        </button>
+                        <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">Work Email</label><div className="relative group"><User className="absolute left-5 top-4 text-slate-400 group-focus-within:text-vantage-600 transition-colors" size={20} /><input type="email" required placeholder="name@vantage.com" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-14 p-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-vantage-100 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div></div>
+                        <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">Password</label><div className="relative group"><Lock className="absolute left-5 top-4 text-slate-400 group-focus-within:text-vantage-600 transition-colors" size={20} /><input type="password" required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-14 p-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-vantage-100 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div></div>
+                        <button disabled={isLoginLoading} className="w-full bg-vantage-900 text-white py-5 rounded-2xl font-bold text-base shadow-xl shadow-vantage-900/20 hover:bg-vantage-800 hover:scale-[1.02] active:scale-95 transition-all mt-4 flex items-center justify-center gap-2">{isLoginLoading ? <RefreshCw className="animate-spin" size={20}/> : 'Secure Login'}</button>
                     </form>
-                    
-                    <div className="mt-8 text-center">
-                        <p className="text-[10px] text-slate-400 font-medium opacity-60">© 2023 Vantage Corp.</p>
-                    </div>
+                    <div className="mt-8 text-center"><p className="text-[10px] text-slate-400 font-medium opacity-60">© {new Date().getFullYear()} Vantage Corp. Secure System.</p></div>
                   </div>
                 </div>
               </div>
             );
           }
 
-          // --- VIEW 2: MAIN APP ---
-          const stats = currentUser.role === 'user' ? getLeaveStats() : {};
+          const adminStats = getFilteredLeavesForAdmin();
           const userLimits = currentUser.limits || DEFAULT_LIMITS;
+          const stats = currentUser.role === 'user' ? getLeaveStats() : {};
 
+          // --- VIEW: MAIN APP ---
           return (
             <div className="flex flex-col h-[100dvh] bg-slate-50 font-sans max-w-md mx-auto shadow-2xl shadow-slate-300 border-x border-white relative overflow-hidden">
               
-              {/* Modern "Merged" Header */}
-              <header className="bg-vantage-900 pt-8 pb-24 px-6 rounded-b-[3rem] relative z-10 shadow-2xl shadow-vantage-900/20">
-                {/* Abstract Background */}
-                <div className="absolute top-[-50%] right-[-20%] w-[400px] h-[400px] bg-gradient-to-b from-emerald-500/20 to-transparent rounded-full blur-3xl pointer-events-none"></div>
-                <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-
-                <div className="flex items-center justify-between relative z-20 mb-6">
+              {/* IMMERSIVE HEADER */}
+              <header className="bg-vantage-900 pt-8 pb-28 px-6 rounded-b-[3.5rem] relative z-10 shadow-2xl shadow-vantage-900/30">
+                <div className="absolute top-[-50%] right-[-20%] w-[400px] h-[400px] bg-gradient-to-b from-emerald-500/10 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+                <div className="flex items-center justify-between relative z-20 mb-8">
                   <div className="flex items-center gap-3">
-                    <div className="bg-white/10 p-2.5 rounded-xl backdrop-blur-md border border-white/10">
-                        <Hexagon size={20} className="fill-emerald-400 text-emerald-400"/>
-                    </div>
-                    <div>
-                        <p className="text-emerald-100/60 text-[10px] font-bold tracking-widest uppercase mb-0.5">Welcome back</p>
-                        <h1 className="text-white font-bold text-xl tracking-tight">{currentUser.name.split(' ')[0]}</h1>
-                    </div>
+                    <div className="bg-white/10 p-2.5 rounded-2xl backdrop-blur-md border border-white/10"><Hexagon size={20} className="fill-emerald-400 text-emerald-400"/></div>
+                    <div><p className="text-emerald-100/60 text-[10px] font-bold tracking-widest uppercase mb-0.5">Welcome back</p><h1 className="text-white font-bold text-xl tracking-tight">{currentUser.name.split(' ')[0]}</h1></div>
                   </div>
-                  
-                  {/* Notification Bell */}
                   <div className="relative">
-                      <button onClick={markNotificationsRead} className="p-3 bg-white/5 rounded-full hover:bg-white/10 transition-all backdrop-blur-md border border-white/5">
-                          <Bell size={20} className="text-white" />
-                          {unreadCount > 0 && (
-                              <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-vantage-900 animate-pulse"></span>
-                          )}
-                      </button>
+                      <button onClick={() => {setShowNotifPanel(!showNotifPanel); if(inAppNotifs.filter(n=>!n.read).length) setInAppNotifs(inAppNotifs.map(n=>({...n, read:true})))}} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all backdrop-blur-md border border-white/5"><Bell size={20} className="text-white" />{inAppNotifs.some(n=>!n.read) && <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-vantage-900 animate-pulse"></span>}</button>
                   </div>
                 </div>
-
-                {/* Dynamic Greeting - Only visible for User */}
-                {currentUser.role === 'user' && (
-                    <div className="relative z-20">
-                        <h2 className="text-3xl font-light text-white/90">{getGreeting()}, <br/><span className="font-bold text-white">{currentUser.name.split(' ')[0]}</span>.</h2>
-                    </div>
-                )}
-                
-                {/* Admin specific header content */}
-                {currentUser.role === 'admin' && (
-                    <div className="relative z-20">
-                        <h2 className="text-2xl font-light text-white/90">Admin <span className="font-bold text-white">Dashboard</span></h2>
-                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 rounded-full border border-emerald-500/30">
-                            <Shield size={12} className="text-emerald-400"/>
-                            <span className="text-xs text-emerald-100 font-medium">{currentUser.department} Department</span>
-                        </div>
-                    </div>
-                )}
+                <div className="relative z-20 pl-1">
+                    {currentUser.role === 'user' ? (
+                        <h2 className="text-3xl font-light text-white/90 leading-tight">{getGreeting()}, <br/><span className="font-bold text-white">Ready to start?</span></h2>
+                    ) : (
+                        <h2 className="text-2xl font-light text-white/90 leading-tight">Admin <span className="font-bold text-white">Dashboard</span><div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20 backdrop-blur-sm"><Shield size={12} className="text-emerald-400"/><span className="text-xs text-emerald-100 font-medium">{currentUser.department}</span></div></h2>
+                    )}
+                </div>
               </header>
 
-              {/* NOTIFICATION OVERLAY */}
+              {/* NOTIFICATIONS PANEL */}
               {showNotifPanel && (
                   <div className="absolute top-24 right-6 w-72 bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl z-50 border border-white/50 overflow-hidden animate-fadeIn">
-                      <div className="bg-slate-50/50 p-4 border-b border-slate-100 flex justify-between items-center">
-                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><Bell size={12}/> Notifications</h3>
-                          <button onClick={clearNotifications} className="text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={14}/></button>
-                      </div>
-                      <div className="max-h-80 overflow-y-auto">
-                          {inAppNotifs.length === 0 ? (
-                              <div className="p-8 text-center text-slate-400 text-xs font-medium">No new alerts</div>
-                          ) : (
-                              inAppNotifs.map(n => (
-                                  <div key={n.id} className={`p-4 border-b border-slate-50 ${n.read ? 'bg-transparent' : 'bg-emerald-50/30'}`}>
-                                      <div className="flex justify-between items-start mb-1">
-                                          <h4 className={`font-bold text-xs ${n.read ? 'text-slate-700' : 'text-vantage-800'}`}>{n.title}</h4>
-                                          <span className="text-[9px] text-slate-400">{n.time}</span>
-                                      </div>
-                                      <p className="text-[11px] text-slate-500 leading-relaxed">{n.msg}</p>
-                                  </div>
-                              ))
-                          )}
-                      </div>
+                      <div className="bg-slate-50/50 p-4 border-b border-slate-100 flex justify-between items-center"><h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><Bell size={12}/> Notifications</h3><button onClick={() => {setInAppNotifs([]); localStorage.removeItem('leave_app_notifications');}} className="text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={14}/></button></div>
+                      <div className="max-h-80 overflow-y-auto">{inAppNotifs.length === 0 ? <div className="p-8 text-center text-slate-400 text-xs font-medium">No new alerts</div> : inAppNotifs.map(n => (<div key={n.id} className={`p-4 border-b border-slate-50 ${n.read ? 'bg-transparent' : 'bg-emerald-50/30'}`}><div className="flex justify-between items-start mb-1"><h4 className={`font-bold text-xs ${n.read ? 'text-slate-700' : 'text-vantage-800'}`}>{n.title}</h4><span className="text-[9px] text-slate-400">{n.time}</span></div><p className="text-[11px] text-slate-500 leading-relaxed">{n.msg}</p></div>))}</div>
                   </div>
               )}
 
-              <main className="flex-1 overflow-y-auto p-5 pb-32 -mt-10 relative z-20 no-scrollbar">
+              <main className="flex-1 overflow-y-auto p-5 pb-32 -mt-12 relative z-20 no-scrollbar">
                 {currentUser.role === 'user' && activeTab === 'dashboard' && (
                   <div className="animate-fadeIn space-y-6">
-                    
-                    {/* Stats Carousel */}
-                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar snap-x">
+                    <div className="flex gap-3 overflow-x-auto pb-4 pt-2 px-1 no-scrollbar snap-x">
                         <BalanceCard type="Sick Leave" used={stats['Sick Leave'] || 0} total={userLimits.sick || 10} icon={Activity} colorClass="text-rose-500" bgClass="bg-rose-50" barClass="bg-rose-500" />
                         <BalanceCard type="Casual" used={stats['Casual Leave'] || 0} total={userLimits.casual || 12} icon={Calendar} colorClass="text-vantage-500" bgClass="bg-emerald-50" barClass="bg-vantage-500" />
                         <BalanceCard type="Earned" used={stats['Earned Leave'] || 0} total={userLimits.earned || 15} icon={PieChart} colorClass="text-indigo-500" bgClass="bg-indigo-50" barClass="bg-indigo-500" />
                     </div>
-
-                    <div className="bg-white p-6 rounded-[2rem] shadow-lg shadow-slate-200/50 border border-slate-100 relative overflow-hidden">
+                    <div className="bg-white p-6 rounded-[2rem] shadow-lg shadow-slate-200/60 border border-slate-100 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-vantage-500/5 rounded-full -mr-8 -mt-8 blur-xl"></div>
                         <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center relative z-10"><Send className="mr-3 text-vantage-600" size={20}/> Apply for Leave</h2>
                         <form onSubmit={handleApply} className="space-y-5 relative z-10">
-                            
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2 ml-1"><Building2 size={12}/> Department</label>
-                                <div className="relative">
-                                    <select value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 transition-all appearance-none text-sm font-semibold text-slate-700">
-                                        {DEPARTMENTS.map(dept => <option key={dept} value={dept}>{dept}</option>)}
-                                    </select>
-                                    <ChevronRight className="absolute right-4 top-4 text-slate-400 rotate-90 pointer-events-none" size={16}/>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2 ml-1"><Briefcase size={12}/> Leave Type</label>
-                                <div className="relative">
-                                    <select value={formData.leaveType} onChange={(e) => setFormData({...formData, leaveType: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 transition-all appearance-none text-sm font-semibold text-slate-700">
-                                        <option>Sick Leave</option><option>Casual Leave</option><option>Earned Leave</option>
-                                    </select>
-                                    <ChevronRight className="absolute right-4 top-4 text-slate-400 rotate-90 pointer-events-none" size={16}/>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 block">Start Date</label>
-                                    <input type="date" required value={formData.startDate} onChange={(e) => setFormData({...formData, startDate: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:border-vantage-500 text-sm font-semibold text-slate-700"/>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 block">End Date</label>
-                                    <input type="date" required value={formData.endDate} onChange={(e) => setFormData({...formData, endDate: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:border-vantage-500 text-sm font-semibold text-slate-700"/>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 block">Reason</label>
-                                <textarea placeholder="Briefly describe the reason..." rows="2" required value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:border-vantage-500 text-sm font-medium text-slate-700 resize-none placeholder:text-slate-300"></textarea>
-                            </div>
-                            
-                            <button disabled={isLoading} className="w-full bg-vantage-900 text-white py-4 rounded-2xl font-bold shadow-xl shadow-vantage-900/20 active:scale-95 transition-all hover:bg-vantage-800 flex justify-center items-center gap-2 text-sm tracking-wide">
-                                {isLoading ? <><RefreshCw className="animate-spin" size={18}/> Processing...</> : 'Submit Request'}
-                            </button>
+                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2 ml-1"><Building2 size={12}/> Department</label><div className="relative"><select value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 transition-all appearance-none text-sm font-semibold text-slate-700">{DEPARTMENTS.map(dept => <option key={dept} value={dept}>{dept}</option>)}</select><ChevronRight className="absolute right-4 top-4 text-slate-400 rotate-90 pointer-events-none" size={16}/></div></div>
+                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2 ml-1"><Briefcase size={12}/> Leave Type</label><div className="relative"><select value={formData.leaveType} onChange={(e) => setFormData({...formData, leaveType: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 transition-all appearance-none text-sm font-semibold text-slate-700"><option>Sick Leave</option><option>Casual Leave</option><option>Earned Leave</option></select><ChevronRight className="absolute right-4 top-4 text-slate-400 rotate-90 pointer-events-none" size={16}/></div></div>
+                            <div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 block">Start Date</label><input type="date" required value={formData.startDate} onChange={(e) => setFormData({...formData, startDate: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:border-vantage-500 text-sm font-semibold text-slate-700"/></div><div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 block">End Date</label><input type="date" required value={formData.endDate} onChange={(e) => setFormData({...formData, endDate: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:border-vantage-500 text-sm font-semibold text-slate-700"/></div></div>
+                            <div><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1 block">Reason</label><textarea placeholder="Briefly describe..." rows="2" required value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none focus:border-vantage-500 text-sm font-medium text-slate-700 resize-none placeholder:text-slate-300"></textarea></div>
+                            <button disabled={isLoading} className="w-full bg-vantage-900 text-white py-4 rounded-2xl font-bold shadow-xl shadow-vantage-900/20 active:scale-95 transition-all hover:bg-vantage-800 flex justify-center items-center gap-2 text-sm tracking-wide">{isLoading ? <><RefreshCw className="animate-spin" size={18}/> Processing...</> : 'Submit Request'}</button>
                         </form>
                     </div>
                   </div>
                 )}
 
                 {currentUser.role === 'user' && activeTab === 'history' && (
-                  <div className="animate-fadeIn">
-                     <div className="flex justify-between items-center mb-6 px-1 pt-2">
-                        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Request History</h2>
-                        <button onClick={() => fetchLeaves(false)} className="p-2 bg-white border border-slate-200 rounded-full text-vantage-600 hover:bg-slate-50 active:scale-95 transition-all shadow-sm"><RefreshCw size={16} className={isLoading ? 'animate-spin' : ''}/></button>
-                     </div>
-                     {leaves.filter(l => l.email === currentUser.email).length === 0 ? 
-                        <div className="flex flex-col items-center justify-center h-64 text-slate-300 bg-white/50 rounded-[2rem] border border-dashed border-slate-200">
-                            <List size={48} className="mb-3 opacity-20"/>
-                            <p className="text-sm font-medium">No records found</p>
-                        </div> 
-                        : leaves.filter(l => l.email === currentUser.email).map(l => <LeaveCard key={l.id} leave={l} isAdmin={false} />)}
+                  <div className="animate-fadeIn pt-4">
+                     <div className="flex justify-between items-center mb-6 px-1"><h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Request History</h2><button onClick={() => fetchLeaves(false)} className="p-2 bg-white border border-slate-200 rounded-full text-vantage-600 hover:bg-slate-50 active:scale-95 transition-all shadow-sm"><RefreshCw size={16} className={isLoading ? 'animate-spin' : ''}/></button></div>
+                     {leaves.filter(l => l.email === currentUser.email).length === 0 ? <div className="flex flex-col items-center justify-center h-64 text-slate-300 bg-white/50 rounded-[2rem] border border-dashed border-slate-200"><List size={48} className="mb-3 opacity-20"/><p className="text-sm font-medium">No records found</p></div> : leaves.filter(l => l.email === currentUser.email).map(l => <LeaveCard key={l.id} leave={l} isAdmin={false} />)}
                   </div>
                 )}
 
                 {currentUser.role === 'admin' && activeTab === 'dashboard' && (
-                  <div className="animate-fadeIn">
-                    <div className="flex gap-2 mb-6 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 sticky top-0 z-30">
-                        <AdminFilterBtn label="Pending" count={pendingCount} active={adminSubTab === 'Pending'} onClick={() => setAdminSubTab('Pending')} colorClass="bg-amber-500" activeBg="bg-amber-500" />
-                        <AdminFilterBtn label="Approved" count={approvedCount} active={adminSubTab === 'Approved'} onClick={() => setAdminSubTab('Approved')} colorClass="bg-emerald-500" activeBg="bg-emerald-500" />
-                        <AdminFilterBtn label="Rejected" count={rejectedCount} active={adminSubTab === 'Rejected'} onClick={() => setAdminSubTab('Rejected')} colorClass="bg-rose-500" activeBg="bg-rose-500" />
+                  <div className="animate-fadeIn pt-4">
+                    <div className="flex gap-2 mb-6 bg-white p-1.5 rounded-2xl shadow-lg shadow-slate-200/40 border border-slate-100 sticky top-0 z-30">
+                        <AdminFilterBtn label="Pending" count={adminStats.pending} active={adminSubTab === 'Pending'} onClick={() => setAdminSubTab('Pending')} activeBg="bg-amber-500" />
+                        <AdminFilterBtn label="Approved" count={adminStats.approved} active={adminSubTab === 'Approved'} onClick={() => setAdminSubTab('Approved')} activeBg="bg-emerald-500" />
+                        <AdminFilterBtn label="Rejected" count={adminStats.rejected} active={adminSubTab === 'Rejected'} onClick={() => setAdminSubTab('Rejected')} activeBg="bg-rose-500" />
                     </div>
-                    
                     <div className="space-y-3">
-                        {displayedLeaves.length === 0 ? 
-                            <div className="py-16 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">
-                                <div className="mx-auto w-14 h-14 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300"><Filter size={28}/></div>
-                                <p className="text-slate-400 font-medium text-sm">No {adminSubTab} Requests</p>
-                            </div> 
-                            : displayedLeaves.map(l => <LeaveCard key={l.id} leave={l} isAdmin={true} />)
-                        }
+                        {adminStats.list.length === 0 ? <div className="py-16 text-center bg-white rounded-[2rem] border border-dashed border-slate-200"><div className="mx-auto w-14 h-14 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300"><Filter size={28}/></div><p className="text-slate-400 font-medium text-sm">No {adminSubTab} Requests</p></div> : adminStats.list.map(l => <LeaveCard key={l.id} leave={l} isAdmin={true} />)}
                     </div>
                   </div>
                 )}
 
                 {currentUser.role === 'admin' && activeTab === 'users' && (
-                    <div className="animate-fadeIn">
-                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 mb-6">
-                            <h2 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2"><Users className="text-vantage-600" size={20}/> Team Allocations</h2>
-                            <p className="text-xs text-slate-400">Manage leave quotas for your team.</p>
-                        </div>
-                        {allUsers.length === 0 ? <div className="text-center text-slate-400 mt-10">Loading users...</div> : 
-                         allUsers.filter(u => u.role === 'user').map((user, idx) => (
+                    <div className="animate-fadeIn pt-4">
+                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 mb-6"><h2 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2"><Users className="text-vantage-600" size={20}/> Team Allocations</h2><p className="text-xs text-slate-400">Manage leave quotas for your team.</p></div>
+                        {allUsers.length === 0 ? <div className="text-center text-slate-400 mt-10">Loading users...</div> : allUsers.filter(u => u.role === 'user').map((user, idx) => (
                             <div key={idx} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-100 mb-3 flex justify-between items-center hover:shadow-md transition-shadow">
-                                <div>
-                                    <div className="font-bold text-slate-800">{user.name}</div>
-                                    <div className="text-xs text-slate-500 mb-2">{user.email}</div>
-                                    <div className="flex gap-2 text-[10px] font-bold">
-                                        <span className="px-2 py-1 bg-rose-50 text-rose-600 rounded-md">Sick: {user.limits?.sick || 10}</span>
-                                        <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-md">Cas: {user.limits?.casual || 12}</span>
-                                        <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-md">Earn: {user.limits?.earned || 15}</span>
-                                    </div>
-                                </div>
+                                <div><div className="font-bold text-slate-800">{user.name}</div><div className="text-xs text-slate-500 mb-2">{user.email}</div><div className="flex gap-2 text-[10px] font-bold"><span className="px-2 py-1 bg-rose-50 text-rose-600 rounded-md">Sick: {user.limits?.sick || 10}</span><span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-md">Cas: {user.limits?.casual || 12}</span><span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-md">Earn: {user.limits?.earned || 15}</span></div></div>
                                 <button onClick={() => openAllocationModal(user)} className="p-3 bg-slate-50 text-vantage-600 rounded-xl hover:bg-vantage-100 transition-colors border border-slate-100"><Edit3 size={18}/></button>
                             </div>
-                         ))
-                        }
+                         ))}
                     </div>
                 )}
 
-                {/* ACTION MODAL (APPROVE/REJECT MESSAGE) */}
                 {actionModal && (
                     <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
                         <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-fadeIn border border-white/20">
-                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${actionModal.status === 'Approved' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                                {actionModal.status === 'Approved' ? <CheckCircle size={24}/> : <XCircle size={24}/>}
-                            </div>
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${actionModal.status === 'Approved' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{actionModal.status === 'Approved' ? <CheckCircle size={24}/> : <XCircle size={24}/>}</div>
                             <h3 className="text-xl font-bold mb-1 text-slate-800">Confirm {actionModal.status}</h3>
                             <p className="text-sm text-slate-500 mb-5">Add an optional message for the employee:</p>
                             <textarea value={adminMessage} onChange={(e) => setAdminMessage(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm mb-6 h-28 resize-none focus:ring-2 focus:ring-vantage-500/20 focus:border-vantage-500 outline-none" placeholder="e.g. Enjoy your time off!"></textarea>
-                            <div className="flex gap-3">
-                                <button onClick={() => setActionModal(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">Cancel</button>
-                                <button onClick={confirmAdminAction} className={`flex-1 py-4 text-white rounded-xl font-bold text-sm shadow-lg ${actionModal.status === 'Approved' ? 'bg-emerald-600 shadow-emerald-200' : 'bg-rose-600 shadow-rose-200'}`}>Confirm</button>
-                            </div>
+                            <div className="flex gap-3"><button onClick={() => setActionModal(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">Cancel</button><button onClick={confirmAdminAction} className={`flex-1 py-4 text-white rounded-xl font-bold text-sm shadow-lg ${actionModal.status === 'Approved' ? 'bg-emerald-600 shadow-emerald-200' : 'bg-rose-600 shadow-rose-200'}`}>Confirm</button></div>
                         </div>
                     </div>
                 )}
@@ -864,69 +498,31 @@
                 {editingUser && (
                     <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
                         <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-fadeIn border border-white/20">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-3 bg-vantage-50 rounded-xl text-vantage-600"><Edit3 size={20}/></div>
-                                <h3 className="text-lg font-bold text-slate-800">Set Quota</h3>
-                            </div>
-                            <p className="text-sm text-slate-500 mb-6 pl-14 -mt-2">For: <span className="font-bold text-slate-800">{editingUser.name}</span></p>
-                            
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                    <label className="w-24 text-xs font-bold text-slate-500 uppercase pl-2">Sick</label>
-                                    <input type="number" value={allocations.sick} onChange={(e) => setAllocations({...allocations, sick: e.target.value})} className="flex-1 p-2 bg-white rounded-lg font-bold text-slate-700 text-center focus:ring-2 focus:ring-vantage-200 outline-none"/>
-                                </div>
-                                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                    <label className="w-24 text-xs font-bold text-slate-500 uppercase pl-2">Casual</label>
-                                    <input type="number" value={allocations.casual} onChange={(e) => setAllocations({...allocations, casual: e.target.value})} className="flex-1 p-2 bg-white rounded-lg font-bold text-slate-700 text-center focus:ring-2 focus:ring-vantage-200 outline-none"/>
-                                </div>
-                                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                    <label className="w-24 text-xs font-bold text-slate-500 uppercase pl-2">Earned</label>
-                                    <input type="number" value={allocations.earned} onChange={(e) => setAllocations({...allocations, earned: e.target.value})} className="flex-1 p-2 bg-white rounded-lg font-bold text-slate-700 text-center focus:ring-2 focus:ring-vantage-200 outline-none"/>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3 mt-8">
-                                <button onClick={() => setEditingUser(null)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors">Cancel</button>
-                                <button onClick={handleSaveAllocation} disabled={isLoading} className="flex-1 py-4 bg-vantage-900 text-white rounded-xl font-bold text-sm shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-colors">{isLoading ? 'Saving...' : 'Save Changes'}</button>
-                            </div>
+                            <div className="flex items-center gap-3 mb-2"><div className="p-3 bg-vantage-50 rounded-xl text-vantage-600"><Edit3 size={20}/></div><h3 className="text-lg font-bold text-slate-800">Set Quota</h3></div><p className="text-sm text-slate-500 mb-6 pl-14 -mt-2">For: <span className="font-bold text-slate-800">{editingUser.name}</span></p>
+                            <div className="space-y-4"><div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100"><label className="w-24 text-xs font-bold text-slate-500 uppercase pl-2">Sick</label><input type="number" value={allocations.sick} onChange={(e) => setAllocations({...allocations, sick: e.target.value})} className="flex-1 p-2 bg-white rounded-lg font-bold text-slate-700 text-center focus:ring-2 focus:ring-vantage-200 outline-none"/></div><div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100"><label className="w-24 text-xs font-bold text-slate-500 uppercase pl-2">Casual</label><input type="number" value={allocations.casual} onChange={(e) => setAllocations({...allocations, casual: e.target.value})} className="flex-1 p-2 bg-white rounded-lg font-bold text-slate-700 text-center focus:ring-2 focus:ring-vantage-200 outline-none"/></div><div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-100"><label className="w-24 text-xs font-bold text-slate-500 uppercase pl-2">Earned</label><input type="number" value={allocations.earned} onChange={(e) => setAllocations({...allocations, earned: e.target.value})} className="flex-1 p-2 bg-white rounded-lg font-bold text-slate-700 text-center focus:ring-2 focus:ring-vantage-200 outline-none"/></div></div>
+                            <div className="flex gap-3 mt-8"><button onClick={() => setEditingUser(null)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors">Cancel</button><button onClick={handleSaveAllocation} disabled={isLoading} className="flex-1 py-4 bg-vantage-900 text-white rounded-xl font-bold text-sm shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-colors">{isLoading ? 'Saving...' : 'Save Changes'}</button></div>
                         </div>
                     </div>
                 )}
 
                 {currentUser.role === 'admin' && activeTab === 'settings' && (
-                  <div className="animate-fadeIn bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                  <div className="animate-fadeIn bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mt-4">
                     <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center"><Settings className="mr-3 text-slate-400" size={22}/> Database Config</h2>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1 tracking-wider">Apps Script URL</label>
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Apps Script URL</label>
                     <input value={scriptUrl} onChange={(e) => setScriptUrl(e.target.value)} placeholder="https://script.google.com/..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm mb-4 focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 outline-none transition-all text-slate-600"/>
                     <button onClick={() => { localStorage.setItem('google_script_url_v2', scriptUrl); showToast("Saved Successfully"); fetchLeaves(); }} className="w-full bg-vantage-900 text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-all">Save Connection</button>
-                    <div className="mt-8 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                        <div className="flex justify-between items-center mb-3">
-                            <h3 className="font-bold text-vantage-900 text-xs uppercase flex items-center gap-2"><Shield size={14} className="text-vantage-600"/> Backend Code</h3>
-                            <span className="text-[10px] text-vantage-600 bg-white px-2 py-1 rounded-md font-bold shadow-sm border border-slate-100">v2.4</span>
-                        </div>
-                        <div className="bg-white p-3 rounded-xl border border-slate-200 h-32 overflow-auto shadow-inner">
-                            <pre className="text-[10px] font-mono text-slate-500">{APPS_SCRIPT_TEMPLATE}</pre>
-                        </div>
-                    </div>
                   </div>
                 )}
               </main>
 
-              {notification && (
-                <div className={`absolute top-20 left-1/2 transform -translate-x-1/2 px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 z-50 text-white text-sm font-bold animate-bounce shadow-vantage-900/20 ${notification.type === 'error' ? 'bg-rose-500' : 'bg-vantage-900'}`}>
-                  {notification.type === 'error' ? <AlertCircle size={18}/> : <CheckCircle size={18}/>}
-                  {notification.msg}
-                </div>
-              )}
+              {notification && <div className={`absolute top-24 left-1/2 transform -translate-x-1/2 px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 z-50 text-white text-sm font-bold animate-bounce shadow-vantage-900/20 ${notification.type === 'error' ? 'bg-rose-500' : 'bg-vantage-900'}`}>{notification.type === 'error' ? <AlertCircle size={18}/> : <CheckCircle size={18}/>}{notification.msg}</div>}
 
-              {/* Modern Floating Bottom Navigation */}
               <div className="fixed bottom-6 left-0 right-0 px-6 z-30">
                   <nav className="bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl shadow-vantage-900/10 rounded-[2rem] flex justify-around items-center h-20 px-2">
                     <NavBtn id="dashboard" icon={currentUser.role === 'admin' ? LayoutGrid : Send} label={currentUser.role === 'admin' ? "Admin" : "Apply"} active={activeTab} set={setActiveTab} />
                     {currentUser.role === 'user' && <NavBtn id="history" icon={List} label="History" active={activeTab} set={setActiveTab} />}
                     {currentUser.role === 'admin' && <NavBtn id="users" icon={Users} label="Team" active={activeTab} set={setActiveTab} />}
                     {currentUser.role === 'admin' && <NavBtn id="settings" icon={Settings} label="Config" active={activeTab} set={setActiveTab} />}
-                    {/* Logout Button */}
                     <NavBtn id="logout" icon={LogOut} label="Logout" active={activeTab} action={handleLogout} danger={true} />
                   </nav>
               </div>
@@ -935,17 +531,10 @@
         }
 
         const NavBtn = ({ id, icon: Icon, label, active, set, action, danger }) => (
-          <button 
-            onClick={() => action ? action() : set(id)} 
-            className={`flex flex-col items-center justify-center w-full h-full transition-all duration-300 group relative ${active === id && !action ? 'text-vantage-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <div className={`p-2 rounded-2xl mb-1 transition-all duration-300 ${active === id && !action ? 'bg-vantage-50 shadow-sm scale-110' : 'bg-transparent group-hover:bg-slate-50'} ${danger ? 'hover:bg-rose-50 hover:text-rose-500' : ''}`}>
-                <Icon size={22} strokeWidth={active === id && !action ? 2.5 : 2} />
-            </div>
+          <button onClick={() => action ? action() : set(id)} className={`flex flex-col items-center justify-center w-full h-full pt-1 transition-all duration-300 group relative ${active === id && !action ? 'text-vantage-600 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}>
+            <div className={`p-2 rounded-2xl mb-1 transition-all duration-300 ${active === id && !action ? 'bg-vantage-50 shadow-sm scale-110' : 'bg-transparent group-hover:bg-slate-50'} ${danger ? 'hover:bg-rose-50 hover:text-rose-500' : ''}`}><Icon size={22} strokeWidth={active === id && !action ? 2.5 : 2} /></div>
             <span className="text-[9px] font-bold tracking-wide opacity-80">{label}</span>
-            {active === id && !action && (
-                <span className="absolute -bottom-1 w-1 h-1 bg-vantage-600 rounded-full"></span>
-            )}
+            {active === id && !action && <span className="absolute -bottom-1 w-1 h-1 bg-vantage-600 rounded-full"></span>}
           </button>
         );
 
