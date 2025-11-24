@@ -199,8 +199,6 @@
             e.preventDefault();
             const days = getDaysDiff(formData.startDate, formData.endDate);
             const stats = getLeaveStats();
-            
-            // Map limits correctly
             const limit = currentUser.limits ? 
                 (formData.leaveType === 'Earned' ? currentUser.limits.earned : 
                  formData.leaveType === 'Sick' ? currentUser.limits.sick : 
@@ -231,6 +229,18 @@
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_user_quota', email: editingUser.email, ...allocations }) });
                 showToast("Quotas Updated!"); setAllUsers(allUsers.map(u => u.email === editingUser.email ? {...u, limits: allocations} : u)); setEditingUser(null);
              } catch (e) { showToast("Update Failed", "error"); } finally { setIsLoading(false); }
+          };
+
+          // --- FIX: Mapped new keys correctly in this function ---
+          const openAllocationModal = (user) => {
+              setEditingUser(user);
+              const limits = user.limits || {};
+              setAllocations({
+                  earned: limits.earned || 15,
+                  sick: limits.sick || 10,
+                  personalPaid: limits.personalPaid || 5,
+                  personalUnpaid: limits.personalUnpaid || 5
+              });
           };
 
           const getFilteredLeavesForAdmin = () => {
