@@ -13,12 +13,12 @@
                 extend: {
                     colors: {
                         vantage: {
-                            900: '#0f172a', // Slate 900
-                            800: '#1e293b', // Slate 800
-                            600: '#475569', // Slate 600
-                            100: '#f1f5f9', // Slate 100
-                            50: '#f8fafc',  // Slate 50
-                            accent: '#6366f1' // Indigo 500
+                            900: '#022c22', // Deepest Green
+                            800: '#064e3b', // Dark Green
+                            600: '#059669', // Emerald
+                            100: '#d1fae5', // Light Green
+                            50: '#ecfdf5',  // Very Light Green
+                            accent: '#10b981' // Bright Emerald
                         }
                     },
                     fontFamily: {
@@ -49,7 +49,7 @@
             font-family: 'Inter', sans-serif;
             overscroll-behavior-y: none;
             -webkit-tap-highlight-color: transparent;
-            background-color: #f8fafc; 
+            background-color: #ecfdf5; /* Matched to vantage-50 */
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
@@ -662,8 +662,6 @@
                               )}
                           </button>
                       </div>
-                      
-                      <button onClick={handleLogout} className="p-2.5 bg-white/10 rounded-xl hover:bg-white/20 transition-colors backdrop-blur-sm"><LogOut size={20} /></button>
                   </div>
                 </div>
               </header>
@@ -897,15 +895,17 @@
                 {currentUser.role === 'user' && <NavBtn id="history" icon={List} label="History" active={activeTab} set={setActiveTab} />}
                 {currentUser.role === 'admin' && <NavBtn id="users" icon={Users} label="Team" active={activeTab} set={setActiveTab} />}
                 {currentUser.role === 'admin' && <NavBtn id="settings" icon={Settings} label="Settings" active={activeTab} set={setActiveTab} />}
+                {/* Logout Button - Always present, performs action directly */}
+                <NavBtn id="logout" icon={LogOut} label="Logout" active={activeTab} action={handleLogout} />
               </nav>
             </div>
           );
         }
 
-        const NavBtn = ({ id, icon: Icon, label, active, set }) => (
-          <button onClick={() => set(id)} className={`flex flex-col items-center justify-center w-full h-full pt-1 transition-all duration-300 ${active === id ? 'text-vantage-accent -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}>
-            <div className={`p-1.5 rounded-xl mb-1 transition-colors ${active === id ? 'bg-indigo-50' : 'bg-transparent'}`}>
-                <Icon size={24} strokeWidth={active === id ? 2.5 : 2} />
+        const NavBtn = ({ id, icon: Icon, label, active, set, action }) => (
+          <button onClick={() => action ? action() : set(id)} className={`flex flex-col items-center justify-center w-full h-full pt-1 transition-all duration-300 ${active === id && !action ? 'text-vantage-accent -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}>
+            <div className={`p-1.5 rounded-xl mb-1 transition-colors ${active === id && !action ? 'bg-indigo-50' : 'bg-transparent'}`}>
+                <Icon size={24} strokeWidth={active === id && !action ? 2.5 : 2} />
             </div>
             <span className="text-[10px] font-bold tracking-wide">{label}</span>
           </button>
