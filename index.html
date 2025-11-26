@@ -25,7 +25,7 @@
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; background-color: #f8fafc; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fadeIn { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-fadeIn { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 1rem); }
         .toggle-checkbox:checked { right: 0; border-color: #10b981; }
@@ -41,7 +41,7 @@
         import { 
           Calendar, User, Send, CheckCircle, XCircle, Settings, AlertCircle, LogOut, Shield, List, 
           RefreshCw, Clock, ChevronRight, Lock, PieChart, Activity, Filter, Building2, Briefcase, 
-          Users, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, UserMinus, UserPlus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw
+          Users, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, UserMinus, UserPlus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw, FileText
         } from 'lucide-react';
 
         const APPS_SCRIPT_TEMPLATE = `/* See Code.gs for full content */`;
@@ -50,28 +50,14 @@
           const DEPARTMENTS = ["Brokerage", "Safety", "Local", "Inbound Custom", "Accounting", "Outbound", "Warehouse"];
           const DEFAULT_LIMITS = { 'Earned': 15, 'Sick': 10, 'Personal Paid': 5, 'Personal Unpaid': 5 };
 
-          // STORAGE KEYS
-          const STORAGE_KEY_USER = 'vantage_user_session_v2';
-          const STORAGE_KEY_LEAVES = 'vantage_cached_leaves_v2';
-          const STORAGE_KEY_USERS_LIST = 'vantage_cached_users_list_v2';
-          const STORAGE_KEY_URL = 'google_script_url_v2';
-
-          const [view, setView] = useState('loading'); // Start in loading state to check session
+          const [view, setView] = useState('login'); 
           const [currentUser, setCurrentUser] = useState(null);
           const [activeTab, setActiveTab] = useState('dashboard');
           const [adminSubTab, setAdminSubTab] = useState('Pending');
+          const [leaves, setLeaves] = useState([]);
+          const [allUsers, setAllUsers] = useState([]); 
           
-          // Initial State from LocalStorage (Instant Load)
-          const [leaves, setLeaves] = useState(() => {
-              const cached = localStorage.getItem(STORAGE_KEY_LEAVES);
-              return cached ? JSON.parse(cached) : [];
-          });
-          
-          const [allUsers, setAllUsers] = useState(() => {
-              const cached = localStorage.getItem(STORAGE_KEY_USERS_LIST);
-              return cached ? JSON.parse(cached) : [];
-          });
-          
+          const [showArchive, setShowArchive] = useState(false);
           const [scriptUrl, setScriptUrl] = useState('https://script.google.com/macros/s/AKfycbywHdk55GxXQ_FPDdhZEJaalMnqYkBZmRbxFpCMuYzZNNbd_cqAiuxFsaSdsHtTLvLz/exec');
           
           const [isLoading, setIsLoading] = useState(false);
@@ -98,8 +84,6 @@
           const [emailEnabled, setEmailEnabled] = useState(true);
           const [showAddUserModal, setShowAddUserModal] = useState(false);
           const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user', department: 'Brokerage', earned: 15, sick: 10, personalPaid: 5, personalUnpaid: 5 });
-          
-          const [showArchive, setShowArchive] = useState(false);
 
           const [formData, setFormData] = useState({ department: 'Brokerage', leaveType: 'Earned', startDate: '', endDate: '', reason: '' });
 
@@ -119,47 +103,28 @@
 
           const isSuperAdmin = currentUser?.role === 'admin' && currentUser?.department === 'All';
 
-          // --- APP INITIALIZATION ---
           useEffect(() => {
             const meta1 = document.createElement('meta'); meta1.name = "apple-mobile-web-app-capable"; meta1.content = "yes"; document.head.appendChild(meta1);
             const meta2 = document.createElement('meta'); meta2.name = "apple-mobile-web-app-status-bar-style"; meta2.content = "black-translucent"; document.head.appendChild(meta2);
             if ("Notification" in window && Notification.permission !== "granted") Notification.requestPermission();
             
-            // 1. Check for Saved URL
-            const savedUrl = localStorage.getItem(STORAGE_KEY_URL);
+            const savedUrl = localStorage.getItem('google_script_url_v2');
             if (savedUrl) setScriptUrl(savedUrl);
-            
-            // 2. Load Notifications
             const savedNotifs = localStorage.getItem('leave_app_notifications');
             if (savedNotifs) setInAppNotifs(JSON.parse(savedNotifs));
-
-            // 3. CHECK SESSION (Instant Login)
-            const sessionUser = localStorage.getItem(STORAGE_KEY_USER);
-            if (sessionUser) {
-                const user = JSON.parse(sessionUser);
-                setCurrentUser(user);
-                setEmailEnabled(user.emailEnabled);
-                setView(user.role === 'admin' ? 'admin' : 'user');
-            } else {
-                setView('login');
-            }
           }, []);
 
           useEffect(() => { localStorage.setItem('leave_app_notifications', JSON.stringify(inAppNotifs)); }, [inAppNotifs]);
 
-          // --- DATA SYNC ---
           useEffect(() => {
-            if (view !== 'login' && view !== 'signup' && view !== 'loading' && scriptUrl) {
-                // Fetch fresh data in background
-                fetchLeaves(true); 
+            if (view !== 'login' && view !== 'signup' && scriptUrl) {
+                fetchLeaves();
                 if (isSuperAdmin) fetchUsersList();
-                
                 const interval = setInterval(() => fetchLeaves(true), 15000);
                 return () => clearInterval(interval);
             }
           }, [view, scriptUrl, currentUser]);
 
-          // --- NOTIFICATIONS ---
           useEffect(() => {
             if (leaves.length === 0 || prevLeavesRef.current.length === 0) { prevLeavesRef.current = leaves; return; }
             const newNotifs = [];
@@ -213,36 +178,22 @@
           const calculateUserTakenLeaves = (userEmail) => {
              return leaves.filter(l => l.email === userEmail && l.status === 'Approved').reduce((acc, leave) => acc + getDaysDiff(leave.startDate, leave.endDate), 0);
           };
-
-          const fetchUsersList = async () => { 
-              try { 
-                  const r = await fetch(scriptUrl + "?action=users"); 
-                  const d = await r.json(); 
-                  if (d.status === 'success') {
-                      setAllUsers(d.data);
-                      // Cache users
-                      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(d.data));
-                  }
-              } catch (e) {} 
+          
+          // NEW: Breakdown for Report
+          const calculateUserLeaveBreakdown = (userEmail) => {
+            const breakdown = { Earned: 0, Sick: 0, 'Personal Paid': 0, 'Personal Unpaid': 0, Total: 0 };
+            leaves.filter(l => l.email === userEmail && l.status === 'Approved').forEach(l => {
+                const days = getDaysDiff(l.startDate, l.endDate);
+                if (breakdown[l.leaveType] !== undefined) {
+                    breakdown[l.leaveType] += days;
+                    breakdown.Total += days;
+                }
+            });
+            return breakdown;
           };
 
-          const fetchLeaves = async (silent = false) => { 
-              if (!scriptUrl) return; 
-              if (!silent) setIsLoading(true); 
-              try { 
-                  const r = await fetch(scriptUrl); 
-                  const d = await r.json(); 
-                  if (d.status === 'success') {
-                      setLeaves(d.data);
-                      // Cache leaves
-                      localStorage.setItem(STORAGE_KEY_LEAVES, JSON.stringify(d.data));
-                  }
-              } catch (e) { 
-                  if(!silent) showToast("Sync Error", "error"); 
-              } finally { 
-                  if (!silent) setIsLoading(false); 
-              } 
-          };
+          const fetchUsersList = async () => { try { const r = await fetch(scriptUrl + "?action=users"); const d = await r.json(); if (d.status === 'success') setAllUsers(d.data); } catch (e) {} };
+          const fetchLeaves = async (silent = false) => { if (!scriptUrl) return; if (!silent) setIsLoading(true); try { const r = await fetch(scriptUrl); const d = await r.json(); if (d.status === 'success') setLeaves(d.data); } catch (e) { if(!silent) showToast("Sync Error", "error"); } finally { if (!silent) setIsLoading(false); } };
 
           const handleLogin = async (e) => {
             e.preventDefault(); setIsLoginLoading(true);
@@ -254,13 +205,7 @@
                     if (u) {
                         if (u.isDeleted) { showToast("Account Archived.", "error"); setIsLoginLoading(false); return; }
                         if (u.isActive === false) { showToast("Account Pending Approval", "error"); setIsLoginLoading(false); return; }
-                        
-                        const userObj = { name: u.name, email: u.email, role: u.role, department: u.department || 'All', limits: u.limits, emailEnabled: u.emailEnabled };
-                        
-                        // Save Session
-                        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userObj));
-                        
-                        setCurrentUser(userObj);
+                        setCurrentUser({ name: u.name, email: u.email, role: u.role, department: u.department || 'All', limits: u.limits, emailEnabled: u.emailEnabled });
                         setEmailEnabled(u.emailEnabled);
                         setView(u.role === 'admin' ? 'admin' : 'user'); setActiveTab('dashboard');
                     } else showToast("Invalid Credentials", "error");
@@ -289,11 +234,6 @@
           const toggleEmailNotifications = async () => {
               const newState = !emailEnabled;
               setEmailEnabled(newState);
-              // Update local session
-              const updatedUser = { ...currentUser, emailEnabled: newState };
-              setCurrentUser(updatedUser);
-              localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
-
               try {
                   await fetch(scriptUrl, {
                       method: 'POST', mode: 'no-cors', 
@@ -350,7 +290,7 @@
                     u.email === targetUser.email ? {
                         ...u, 
                         isDeleted: isDeleted,
-                        isActive: isDeleted ? u.isActive : true // Auto-activate on restore
+                        isActive: isDeleted ? u.isActive : true 
                     } : u
                 ));
                 setEditingUser(null);
@@ -365,15 +305,7 @@
              } catch (e) { showToast("Update Failed", "error"); } finally { setIsLoading(false); }
           };
 
-          const handleLogout = () => { 
-              setCurrentUser(null); 
-              setView('login'); 
-              setEmail(''); 
-              setPassword(''); 
-              setInAppNotifs([]);
-              // Clear session
-              localStorage.removeItem(STORAGE_KEY_USER);
-          };
+          const handleLogout = () => { setCurrentUser(null); setView('login'); setEmail(''); setPassword(''); setInAppNotifs([]); };
 
           const handleApply = async (e) => {
             e.preventDefault();
@@ -392,21 +324,7 @@
             setIsLoading(true);
             try {
               await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'apply', id: 'L' + Date.now(), name: currentUser.name, email: currentUser.email, department: currentUser.department, ...formData }) });
-              // Optimistic Update for instant feel
-              const newLeave = { 
-                  id: 'L' + Date.now(), 
-                  name: currentUser.name, 
-                  email: currentUser.email, 
-                  department: currentUser.department, 
-                  status: 'Pending', 
-                  ...formData 
-              };
-              setLeaves([newLeave, ...leaves]);
-              
-              setFormData({ ...formData, reason: '', startDate: '', endDate: '' }); setActiveTab('history'); showToast("Application Sent!"); 
-              
-              // Sync in background
-              fetchLeaves(true);
+              setFormData({ ...formData, reason: '', startDate: '', endDate: '' }); setActiveTab('history'); showToast("Application Sent!"); fetchLeaves(true);
             } catch (error) { showToast("Network Error", "error"); } finally { setIsLoading(false); }
           };
 
@@ -424,7 +342,7 @@
                 showToast("Quotas Updated!"); setAllUsers(allUsers.map(u => u.email === editingUser.email ? {...u, limits: allocations} : u)); setEditingUser(null);
              } catch (e) { showToast("Update Failed", "error"); } finally { setIsLoading(false); }
           };
-          
+
           const handleAddUser = async () => {
             if(!newUser.name || !newUser.email || !newUser.password) return showToast("Fill all fields", "error");
             setIsLoading(true);
@@ -524,7 +442,15 @@
                   <Icon size={18} />
                   <span className="text-sm font-medium">{label}</span>
               </button>
-          );
+        );
+
+        const NavBtn = ({ id, icon: Icon, label, active, set, action, danger }) => (
+          <button onClick={() => action ? action() : set(id)} className={`flex flex-col items-center justify-center w-full h-full pt-0.5 transition-all duration-300 group relative ${active === id && !action ? 'text-vantage-600 -translate-y-0.5' : 'text-slate-400 hover:text-slate-600'}`}>
+            <div className={`p-1.5 rounded-xl mb-0.5 transition-all duration-300 ${active === id && !action ? 'bg-vantage-50 shadow-sm scale-105' : 'bg-transparent group-hover:bg-slate-50'} ${danger ? 'hover:bg-rose-50 hover:text-rose-500' : ''}`}><Icon size={20} strokeWidth={active === id && !action ? 2.5 : 2} /></div>
+            <span className="text-[9px] font-bold tracking-wide opacity-90">{label}</span>
+            {active === id && !action && <span className="absolute -bottom-0.5 w-1 h-1 bg-vantage-600 rounded-full"></span>}
+          </button>
+        );
 
           // --- VIEW: LOADING ---
           if (view === 'loading') {
@@ -536,6 +462,7 @@
             return (
               <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-3/5 bg-vantage-900 rounded-b-[4rem] z-0 shadow-2xl"></div>
+                
                 <div className="w-full max-w-sm bg-white/90 backdrop-blur-xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden border border-white/60 z-10">
                   <div className="p-8 pt-10 text-center">
                     <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-1">Create Account</h1>
@@ -607,6 +534,7 @@
                           <SidebarLink id="dashboard" icon={currentUser.role === 'admin' ? LayoutGrid : Send} label={currentUser.role === 'admin' ? "Dashboard" : "Apply for Leave"} active={activeTab} set={setActiveTab} />
                           {currentUser.role === 'user' && <SidebarLink id="history" icon={List} label="My History" active={activeTab} set={setActiveTab} />}
                           {isSuperAdmin && <SidebarLink id="users" icon={Users} label="Team Allocations" active={activeTab} set={setActiveTab} />}
+                          {isSuperAdmin && <SidebarLink id="report" icon={FileText} label="Report" active={activeTab} set={setActiveTab} />}
                           {isSuperAdmin && <SidebarLink id="settings" icon={Settings} label="Configuration" active={activeTab} set={setActiveTab} />}
                       </nav>
                   </div>
@@ -657,7 +585,7 @@
                   {/* DESKTOP HEADER */}
                   <header className="hidden md:flex bg-white border-b border-slate-200 px-8 py-4 justify-between items-center z-20">
                       <div>
-                          <h2 className="text-xl font-bold text-slate-800">{activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'history' ? 'Leave History' : activeTab === 'users' ? 'Team Management' : 'Settings'}</h2>
+                          <h2 className="text-xl font-bold text-slate-800">{activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'history' ? 'Leave History' : activeTab === 'users' ? 'Team Management' : activeTab === 'report' ? 'Leave Report' : 'Settings'}</h2>
                           <p className="text-xs text-slate-500">{getGreeting()}, {currentUser.name.split(' ')[0]}</p>
                       </div>
                       <div className="flex items-center gap-4">
@@ -827,6 +755,52 @@
                             )}
                         </div>
                     )}
+                    
+                    {/* NEW REPORT TAB */}
+                    {isSuperAdmin && activeTab === 'report' && (
+                        <div className="animate-fadeIn pt-2 max-w-5xl mx-auto">
+                             <div className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-100 mb-5 flex justify-between items-center">
+                               <div>
+                                 <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2"><FileText className="text-vantage-600" size={18}/> Leave Report</h2>
+                                 <p className="text-[10px] text-slate-400">Comprehensive usage summary.</p>
+                               </div>
+                            </div>
+                            <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+                                {allUsers.length === 0 ? <div className="text-center text-slate-400 mt-10 text-xs col-span-2">Loading...</div> : allUsers.filter(u => u.role === 'user').map((user, idx) => {
+                                    const stats = calculateUserLeaveBreakdown(user.email);
+                                    return (
+                                        <div key={idx} className="bg-white p-4 rounded-[1.25rem] shadow-sm border border-slate-100 mb-3 flex flex-col gap-3">
+                                            <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                                                <div>
+                                                    <div className="font-bold text-slate-800 text-sm">{user.name}</div>
+                                                    <div className="text-[10px] text-slate-500">{user.email}</div>
+                                                </div>
+                                                <div className="text-xs font-bold bg-slate-100 px-2 py-1 rounded-lg text-slate-600">Total: {stats.Total}</div>
+                                            </div>
+                                            <div className="grid grid-cols-4 gap-2 text-center">
+                                                <div className="bg-emerald-50 p-1.5 rounded-lg">
+                                                    <p className="text-[9px] text-emerald-600 font-bold uppercase">Earn</p>
+                                                    <p className="text-xs font-bold text-emerald-700">{stats.Earned}</p>
+                                                </div>
+                                                <div className="bg-rose-50 p-1.5 rounded-lg">
+                                                    <p className="text-[9px] text-rose-600 font-bold uppercase">Sick</p>
+                                                    <p className="text-xs font-bold text-rose-700">{stats.Sick}</p>
+                                                </div>
+                                                <div className="bg-vantage-50 p-1.5 rounded-lg">
+                                                    <p className="text-[9px] text-vantage-600 font-bold uppercase">P.Pd</p>
+                                                    <p className="text-xs font-bold text-vantage-700">{stats['Personal Paid']}</p>
+                                                </div>
+                                                <div className="bg-indigo-50 p-1.5 rounded-lg">
+                                                    <p className="text-[9px] text-indigo-600 font-bold uppercase">P.Up</p>
+                                                    <p className="text-xs font-bold text-indigo-700">{stats['Personal Unpaid']}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* EDIT USER / ACTIVATE / DELETE MODAL */}
                     {editingUser && (
@@ -947,6 +921,7 @@
                         <NavBtn id="dashboard" icon={currentUser.role === 'admin' ? LayoutGrid : Send} label={currentUser.role === 'admin' ? "Admin" : "Apply"} active={activeTab} set={setActiveTab} />
                         {currentUser.role === 'user' && <NavBtn id="history" icon={List} label="History" active={activeTab} set={setActiveTab} />}
                         {isSuperAdmin && <NavBtn id="users" icon={Users} label="Team" active={activeTab} set={setActiveTab} />}
+                        {isSuperAdmin && <NavBtn id="report" icon={FileText} label="Report" active={activeTab} set={setActiveTab} />}
                         {isSuperAdmin && <NavBtn id="settings" icon={Settings} label="Config" active={activeTab} set={setActiveTab} />}
                         <NavBtn id="logout" icon={LogOut} label="Logout" active={activeTab} action={handleLogout} danger={true} />
                       </nav>
