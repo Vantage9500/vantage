@@ -74,7 +74,7 @@ function doPost(e) {
              user: { 
                name: users[i][0], email: users[i][1], role: users[i][3], department: users[i][4] || 'All',
                limits: { earned: users[i][5] || 15, sick: users[i][6] || 10, personalPaid: users[i][7] || 5, personalUnpaid: users[i][8] || 5 },
-               emailEnabled: users[i][9] === "" ? true : users[i][9]
+               emailEnabled: users[i][9] === "" ? false : users[i][9] // Default to FALSE
              }
            });
         }
@@ -99,8 +99,9 @@ function doPost(e) {
         if (String(users[i][1]).toLowerCase() === String(data.email).toLowerCase()) return response({status: 'error', message: 'Email already registered'});
       }
       const isActive = data.action === "add_user" ? true : false;
+      // Set Email_Notifications to FALSE by default (Column 10)
       sheet.appendRow([data.name, String(data.email).toLowerCase(), data.password, data.role || "user", data.department || "Unassigned", 
-        data.earned||15, data.sick||10, data.personalPaid||5, data.personalUnpaid||5, true, isActive, false
+        data.earned||15, data.sick||10, data.personalPaid||5, data.personalUnpaid||5, false, isActive, false
       ]);
       return response({status: 'success', message: 'Success'});
     }
@@ -181,7 +182,7 @@ function doPost(e) {
   } catch(e) { return response({status: 'error', error: e.toString()}); } finally { lock.releaseLock(); }
 }
 
-function sendEmailToAdmins(ss, leaveData) { try { const uS=ss.getSheetByName(SHEET_USERS); const us=uS.getDataRange().getValues(); us.forEach(u=>{ if(u[3]==='admin'&&(u[9]===""?true:u[9])===true&&(u[4]==='All'||u[4]===leaveData.department)) MailApp.sendEmail({to:u[1],subject:\`New Request: \${leaveData.name}\`,htmlBody:\`Request from \${leaveData.name}.\`}); }); } catch(e){} }
+function sendEmailToAdmins(ss, leaveData) { try { const uS=ss.getSheetByName(SHEET_USERS); const us=uS.getDataRange().getValues(); us.forEach(u=>{ if(u[3]==='admin'&&(u[9]===""?false:u[9])===true&&(u[4]==='All'||u[4]===leaveData.department)) MailApp.sendEmail({to:u[1],subject:\`New Request: \${leaveData.name}\`,htmlBody:\`Request from \${leaveData.name}.\`}); }); } catch(e){} }
 function sendEmailToUser(e,n,s,m){ try{ MailApp.sendEmail({to:e,subject:\`Leave \${s}\`,htmlBody:\`Your request is \${s}.\`}); }catch(e){} }
 
 function doGet(e) {
@@ -190,7 +191,8 @@ function doGet(e) {
 
   if (action === "users") {
     const sheet = ss.getSheetByName(SHEET_USERS); const rows = sheet.getDataRange().getValues(); rows.shift();
-    return response({status: 'success', data: rows.map(r => ({ name: r[0], email: r[1], password: r[2], role: r[3], department: r[4], limits: { earned: r[5]||15, sick: r[6]||10, personalPaid: r[7]||5, personalUnpaid: r[8]||5 }, emailEnabled: r[9]===""?true:r[9], isActive: r[10]===""?true:r[10], isDeleted: r[11]===true }))});
+    // Default emailEnabled to FALSE if empty/undefined
+    return response({status: 'success', data: rows.map(r => ({ name: r[0], email: r[1], password: r[2], role: r[3], department: r[4], limits: { earned: r[5]||15, sick: r[6]||10, personalPaid: r[7]||5, personalUnpaid: r[8]||5 }, emailEnabled: r[9]===""?false:r[9], isActive: r[10]===""?true:r[10], isDeleted: r[11]===true }))});
   }
   // NEW: GET HOLIDAYS
   if (action === "holidays") {
@@ -211,7 +213,7 @@ function setup() {
   let ls = ss.getSheetByName(SHEET_LEAVES); if (!ls) { ls = ss.insertSheet(SHEET_LEAVES); ls.appendRow(["ID", "Timestamp", "Name", "Email", "Department", "Type", "Start Date", "End Date", "Reason", "Status", "Admin Message"]); }
   let us = ss.getSheetByName(SHEET_USERS); 
   const h = ["Name", "Email", "Password", "Role", "Department", "Earned_Quota", "Sick_Quota", "Personal_Paid_Quota", "Personal_Unpaid_Quota", "Email_Notifications", "Is_Active", "Is_Deleted"];
-  if (!us) { us = ss.insertSheet(SHEET_USERS); us.appendRow(h); us.appendRow(["Super Admin", "admin@company.com", "admin123", "admin", "All", 99, 99, 99, 99, true, true, false]); } 
+  if (!us) { us = ss.insertSheet(SHEET_USERS); us.appendRow(h); us.appendRow(["Super Admin", "admin@company.com", "admin123", "admin", "All", 99, 99, 99, 99, false, true, false]); } 
   else { us.getRange(1, 1, 1, h.length).setValues([h]); }
   
   // NEW: HOLIDAYS SHEET
@@ -331,7 +333,7 @@ function setup() {
           const [showPasswordModal, setShowPasswordModal] = useState(false);
           const [newPassword, setNewPassword] = useState('');
           
-          const [emailEnabled, setEmailEnabled] = useState(true);
+          const [emailEnabled, setEmailEnabled] = useState(false); // Default to false locally as well
           const [showAddUserModal, setShowAddUserModal] = useState(false);
           const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user', department: DEPARTMENTS[0], earned: 15, sick: 10, personalPaid: 5, personalUnpaid: 5 });
 
@@ -1044,83 +1046,6 @@ function setup() {
                                 </div>
 
                                 <div className="flex gap-2 mt-6"><button onClick={() => setEditingUser(null)} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button><button onClick={handleUpdateUser} disabled={isLoading} className="flex-1 py-3 bg-vantage-900 text-white rounded-xl font-bold text-xs shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-colors">{isLoading ? 'Saving...' : 'Save Changes'}</button></div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* NEW: ADD USER MODAL */}
-                    {showAddUserModal && (
-                        <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-                            <form onSubmit={handleAddUser} className="bg-white w-full max-w-md rounded-[1.5rem] p-6 shadow-2xl animate-fadeIn border border-white/20 max-h-[90vh] overflow-y-auto no-scrollbar">
-                                <div className="flex items-center justify-between mb-6">
-                                    <div className="flex items-center gap-2">
-                                        <div className="p-2 bg-vantage-50 rounded-lg text-vantage-600"><UserPlus size={18}/></div>
-                                        <h3 className="text-lg font-bold text-slate-800">Add New Employee</h3>
-                                    </div>
-                                    <button type="button" onClick={() => setShowAddUserModal(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><XSquare size={18}/></button>
-                                </div>
-                                
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Full Name</label><input required type="text" value={newUser.name} onChange={(e) => setNewUser({...newUser, name: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500" placeholder="Jane Doe"/></div>
-                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Work Email</label><input required type="email" value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500" placeholder="jane@vantage.com"/></div>
-                                    </div>
-                                    <div><label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Initial Password</label><input required type="password" value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500" placeholder="Secure initial password"/></div>
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Role</label>
-                                            <select value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500">
-                                                <option value="user">Employee</option>
-                                                <option value="admin">Manager/Head</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Department</label>
-                                            <select value={newUser.department} onChange={(e) => setNewUser({...newUser, department: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500">
-                                                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 pt-2 border-t border-slate-100">Initial Leave Quotas</p>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        <div><label className="text-[9px] text-slate-400">Earned</label><input type="number" value={newUser.earned} onChange={(e) => setNewUser({...newUser, earned: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
-                                        <div><label className="text-[9px] text-slate-400">Sick</label><input type="number" value={newUser.sick} onChange={(e) => setNewUser({...newUser, sick: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
-                                        <div><label className="text-[9px] text-slate-400">P.Paid</label><input type="number" value={newUser.personalPaid} onChange={(e) => setNewUser({...newUser, personalPaid: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
-                                        <div><label className="text-[9px] text-slate-400">P.Unpaid</label><input type="number" value={newUser.personalUnpaid} onChange={(e) => setNewUser({...newUser, personalUnpaid: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-2 mt-6">
-                                    <button type="button" onClick={() => setShowAddUserModal(false)} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button>
-                                    <button type="submit" disabled={isLoading} className="flex-1 py-3 bg-vantage-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-vantage-500/20 hover:bg-vantage-600 transition-colors flex items-center justify-center gap-2">{isLoading ? <><RefreshCw className="animate-spin" size={14}/> Adding...</> : 'Confirm & Add User'}</button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-
-
-                    {/* PASSWORD CHANGE MODAL */}
-                    {showPasswordModal && (
-                        <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-                            <div className="bg-white w-full max-w-xs rounded-[1.5rem] p-6 shadow-2xl animate-fadeIn border border-white/20">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="p-2 bg-vantage-50 rounded-lg text-vantage-600"><Key size={16}/></div>
-                                    <h3 className="text-base font-bold text-slate-800">Change Password</h3>
-                                </div>
-                                <p className="text-xs text-slate-500 mb-4">Enter your new password below:</p>
-                                <input 
-                                    type="password" 
-                                    value={newPassword} 
-                                    onChange={(e) => setNewPassword(e.target.value)} 
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm mb-6 focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none" 
-                                    placeholder="New Password"
-                                />
-                                <div className="flex gap-2">
-                                    <button onClick={() => {setShowPasswordModal(false); setNewPassword('');}} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button>
-                                    <button onClick={handleChangePassword} disabled={isLoading} className="flex-1 py-3 bg-vantage-900 text-white rounded-xl font-bold text-xs shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-colors">{isLoading ? 'Updating...' : 'Update'}</button>
-                                </div>
                             </div>
                         </div>
                     )}
