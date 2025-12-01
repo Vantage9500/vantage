@@ -45,7 +45,7 @@
           Users, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, UserMinus, UserPlus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw, FileText, Code, Copy, Globe, Palmtree
         } from 'lucide-react';
 
-        // Embedded Google Apps Script Code
+        // Embedded Google Apps Script Code (UPDATED WITH 0 VALUE FIXES)
         const APPS_SCRIPT_TEMPLATE = `
 const SHEET_LEAVES = "Leaves";
 const SHEET_USERS = "Users";
@@ -69,12 +69,21 @@ function doPost(e) {
            if (isDeleted) return response({status: 'error', message: 'Account is archived/deleted.'});
            const isActive = users[i][10] === "" ? true : users[i][10];
            if (!isActive) return response({status: 'error', message: 'Account pending approval.'});
+           
+           // Use ternary operators to allow 0 values
+           const limits = {
+             earned: users[i][5] === "" ? 15 : users[i][5],
+             sick: users[i][6] === "" ? 10 : users[i][6],
+             personalPaid: users[i][7] === "" ? 5 : users[i][7],
+             personalUnpaid: users[i][8] === "" ? 5 : users[i][8]
+           };
+
            return response({
              status: 'success', 
              user: { 
                name: users[i][0], email: users[i][1], role: users[i][3], department: users[i][4] || 'All',
-               limits: { earned: users[i][5] || 15, sick: users[i][6] || 10, personalPaid: users[i][7] || 5, personalUnpaid: users[i][8] || 5 },
-               emailEnabled: users[i][9] === "" ? false : users[i][9] // Default to FALSE
+               limits: limits,
+               emailEnabled: users[i][9] === "" ? false : users[i][9] 
              }
            });
         }
@@ -99,8 +108,15 @@ function doPost(e) {
         if (String(users[i][1]).toLowerCase() === String(data.email).toLowerCase()) return response({status: 'error', message: 'Email already registered'});
       }
       const isActive = data.action === "add_user" ? true : false;
+      
+      // Allow 0 values
+      const eQ = data.earned !== undefined ? data.earned : 15;
+      const sQ = data.sick !== undefined ? data.sick : 10;
+      const ppQ = data.personalPaid !== undefined ? data.personalPaid : 5;
+      const puQ = data.personalUnpaid !== undefined ? data.personalUnpaid : 5;
+
       sheet.appendRow([data.name, String(data.email).toLowerCase(), data.password, data.role || "user", data.department || "Unassigned", 
-        data.earned||15, data.sick||10, data.personalPaid||5, data.personalUnpaid||5, false, isActive, false
+        eQ, sQ, ppQ, puQ, false, isActive, false
       ]);
       return response({status: 'success', message: 'Success'});
     }
@@ -171,7 +187,6 @@ function doPost(e) {
       }
       return response({status: 'error', message: 'User not found'});
     }
-    // NEW: ADD HOLIDAY
     else if (data.action === "add_holiday") {
       const sheet = ss.getSheetByName(SHEET_HOLIDAYS);
       sheet.appendRow([data.id, data.date, data.name, data.addedBy]);
@@ -190,7 +205,17 @@ function doGet(e) {
 
   if (action === "users") {
     const sheet = ss.getSheetByName(SHEET_USERS); const rows = sheet.getDataRange().getValues(); rows.shift();
-    return response({status: 'success', data: rows.map(r => ({ name: r[0], email: r[1], password: r[2], role: r[3], department: r[4], limits: { earned: r[5]||15, sick: r[6]||10, personalPaid: r[7]||5, personalUnpaid: r[8]||5 }, emailEnabled: r[9]===""?false:r[9], isActive: r[10]===""?true:r[10], isDeleted: r[11]===true }))});
+    // Allow 0 values by explicitly checking for empty string
+    return response({status: 'success', data: rows.map(r => ({ 
+      name: r[0], email: r[1], password: r[2], role: r[3], department: r[4], 
+      limits: { 
+        earned: r[5]===""?15:r[5], 
+        sick: r[6]===""?10:r[6], 
+        personalPaid: r[7]===""?5:r[7], 
+        personalUnpaid: r[8]===""?5:r[8] 
+      }, 
+      emailEnabled: r[9]===""?false:r[9], isActive: r[10]===""?true:r[10], isDeleted: r[11]===true 
+    }))});
   }
   if (action === "holidays") {
     const sheet = ss.getSheetByName(SHEET_HOLIDAYS); 
@@ -529,7 +554,7 @@ function setup() {
           const confirmAdminAction = async () => { if (!actionModal) return; setLeaves(leaves.map(l => l.id === actionModal.id ? { ...l, status: actionModal.status, adminMessage } : l)); setActionModal(null); try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: actionModal.id, status: actionModal.status, message: adminMessage }) }); showToast(`Request ${actionModal.status}`); } catch (e) { showToast("Failed to sync", "error"); } };
           const handleSaveAllocation = async () => { if(!editingUser) return; setIsLoading(true); try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_user_quota', email: editingUser.email, ...allocations }) }); showToast("Quotas Updated!"); setAllUsers(allUsers.map(u => u.email === editingUser.email ? {...u, limits: allocations} : u)); setEditingUser(null); } catch (e) { showToast("Update Failed", "error"); } finally { setIsLoading(false); } };
           const handleAddUser = async (e) => { e.preventDefault(); if(!newUser.name || !newUser.email || !newUser.password) return showToast("Fill Name, Email, and Password.", "error"); setIsLoading(true); try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_user', ...newUser, email: newUser.email.toLowerCase(), earned: Number(newUser.earned), sick: Number(newUser.sick), personalPaid: Number(newUser.personalPaid), personalUnpaid: Number(newUser.personalUnpaid) }) }); showToast("User Added Successfully!"); setShowAddUserModal(false); fetchUsersList(); setNewUser({ name: '', email: '', password: '', role: 'user', department: DEPARTMENTS[0], earned: 15, sick: 10, personalPaid: 5, personalUnpaid: 5 }); } catch (e) { showToast("Failed to add user", "error"); } finally { setIsLoading(false); } };
-          const openAllocationModal = (user) => { setEditingUser(user); const limits = user.limits || {}; setAllocations({ earned: limits.earned || 15, sick: limits.sick || 10, personalPaid: limits.personalPaid || 5, personalUnpaid: limits.personalUnpaid || 5 }); setEditUserRole(user.role); setEditUserDept(user.department); setEditUserActive(user.isActive); };
+          const openAllocationModal = (user) => { setEditingUser(user); const limits = user.limits || {}; setAllocations({ earned: limits.earned !== undefined ? limits.earned : 15, sick: limits.sick !== undefined ? limits.sick : 10, personalPaid: limits.personalPaid !== undefined ? limits.personalPaid : 5, personalUnpaid: limits.personalUnpaid !== undefined ? limits.personalUnpaid : 5 }); setEditUserRole(user.role); setEditUserDept(user.department); setEditUserActive(user.isActive); };
           const getFilteredLeavesForAdmin = () => { let deptLeaves; if (activeTab === 'hr_inbox') { deptLeaves = leaves.filter(l => { const role = getUserRole(l.email); return role === 'admin' && l.department !== 'All'; }); } else { deptLeaves = leaves.filter(l => { const matchDept = currentUser.department === 'All' || l.department === currentUser.department; if (!matchDept) return false; if (isDeptAdmin && String(l.email).toLowerCase() === String(currentUser.email).toLowerCase()) return false; if (isSuperAdmin) { const role = getUserRole(l.email); if (role === 'admin') return false; } return true; }); } return { pending: deptLeaves.filter(l => l.status === 'Pending').length, approved: deptLeaves.filter(l => l.status === 'Approved').length, rejected: deptLeaves.filter(l => l.status === 'Rejected').length, list: deptLeaves.filter(l => l.status === adminSubTab) }; };
           const copyToClipboard = () => { const textarea = document.createElement('textarea'); textarea.value = APPS_SCRIPT_TEMPLATE; document.body.appendChild(textarea); textarea.focus(); textarea.select(); try { document.execCommand('copy'); showToast("Code Copied to Clipboard!"); } catch (err) { showToast("Failed to copy code.", "error"); } document.body.removeChild(textarea); };
 
@@ -730,10 +755,10 @@ function setup() {
                     {( (currentUser.role === 'user' && activeTab === 'dashboard') || (isDeptAdmin && activeTab === 'dashboard_self') ) && (
                       <div className="animate-fadeIn space-y-5 md:space-y-8 max-w-5xl mx-auto">
                         <div className="flex gap-3 md:gap-6 overflow-x-auto pb-2 px-1 no-scrollbar snap-x md:grid md:grid-cols-4">
-                            <BalanceCard type="Earned" used={stats['Earned'] || 0} total={userLimits.earned || 15} icon={PieChart} colorClass="text-emerald-500" bgClass="bg-emerald-50" barClass="bg-emerald-500" />
-                            <BalanceCard type="Sick" used={stats['Sick'] || 0} total={userLimits.sick || 10} icon={Activity} colorClass="text-rose-500" bgClass="bg-rose-50" barClass="bg-rose-500" />
-                            <BalanceCard type="Pers. Paid" used={stats['Personal Paid'] || 0} total={userLimits.personalPaid || 5} icon={DollarSign} colorClass="text-vantage-500" bgClass="bg-vantage-50" barClass="bg-vantage-500" />
-                            <BalanceCard type="Pers. Unpaid" used={stats['Personal Unpaid'] || 0} total={userLimits.personalUnpaid || 5} icon={UserMinus} colorClass="text-indigo-500" bgClass="bg-indigo-50" barClass="bg-indigo-500" />
+                            <BalanceCard type="Earned" used={stats['Earned'] || 0} total={userLimits.earned !== undefined ? userLimits.earned : 15} icon={PieChart} colorClass="text-emerald-500" bgClass="bg-emerald-50" barClass="bg-emerald-500" />
+                            <BalanceCard type="Sick" used={stats['Sick'] || 0} total={userLimits.sick !== undefined ? userLimits.sick : 10} icon={Activity} colorClass="text-rose-500" bgClass="bg-rose-50" barClass="bg-rose-500" />
+                            <BalanceCard type="Pers. Paid" used={stats['Personal Paid'] || 0} total={userLimits.personalPaid !== undefined ? userLimits.personalPaid : 5} icon={DollarSign} colorClass="text-vantage-500" bgClass="bg-vantage-50" barClass="bg-vantage-500" />
+                            <BalanceCard type="Pers. Unpaid" used={stats['Personal Unpaid'] || 0} total={userLimits.personalUnpaid !== undefined ? userLimits.personalUnpaid : 5} icon={UserMinus} colorClass="text-indigo-500" bgClass="bg-indigo-50" barClass="bg-indigo-500" />
                         </div>
                         <div className="bg-white p-5 md:p-8 rounded-[1.5rem] shadow-lg shadow-slate-200/60 border border-slate-100 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-20 h-20 bg-vantage-500/5 rounded-full -mr-5 -mt-5 blur-lg"></div>
@@ -920,10 +945,10 @@ function setup() {
                                                             <div className="text-[10px] text-slate-500 mb-1">{user.email}</div>
                                                             <div className="text-[9px] font-bold text-emerald-600 mb-2 bg-emerald-50 inline-block px-2 py-0.5 rounded border border-emerald-100">Total Taken: {totalTaken} Days</div>
                                                             <div className="flex gap-2 text-[9px] font-bold flex-wrap max-w-[200px]">
-                                                                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded">E: {user.limits?.earned || 15}</span>
-                                                                <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 rounded">S: {user.limits?.sick || 10}</span>
-                                                                <span className="px-1.5 py-0.5 bg-vantage-50 text-vantage-600 rounded">P.P: {user.limits?.personalPaid || 5}</span>
-                                                                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">P.U: {user.limits?.personalUnpaid || 5}</span>
+                                                                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded">E: {user.limits?.earned !== undefined ? user.limits.earned : 15}</span>
+                                                                <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 rounded">S: {user.limits?.sick !== undefined ? user.limits.sick : 10}</span>
+                                                                <span className="px-1.5 py-0.5 bg-vantage-50 text-vantage-600 rounded">P.P: {user.limits?.personalPaid !== undefined ? user.limits.personalPaid : 5}</span>
+                                                                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">P.U: {user.limits?.personalUnpaid !== undefined ? user.limits.personalUnpaid : 5}</span>
                                                             </div>
                                                         </div>
                                                         <button onClick={() => openAllocationModal(user)} className="p-2.5 bg-slate-50 text-vantage-600 rounded-xl hover:bg-vantage-100 transition-colors border border-slate-100"><Edit3 size={16}/></button>
