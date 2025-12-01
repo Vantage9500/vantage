@@ -45,7 +45,7 @@
           Users, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, UserMinus, UserPlus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw, FileText, Code, Copy, Globe, Palmtree
         } from 'lucide-react';
 
-        // Embedded Google Apps Script Code (UPDATED WITH HOLIDAYS)
+        // Embedded Google Apps Script Code
         const APPS_SCRIPT_TEMPLATE = `
 const SHEET_LEAVES = "Leaves";
 const SHEET_USERS = "Users";
@@ -436,8 +436,19 @@ function setup() {
           const fetchUsersList = async () => { try { const r = await fetch(scriptUrl + "?action=users"); const d = await r.json(); if (d.status === 'success') setAllUsers(d.data); } catch (e) {} };
           const fetchLeaves = async (silent = false) => { if (!scriptUrl) return; if (!silent) setIsLoading(true); try { const r = await fetch(scriptUrl); const d = await r.json(); if (d.status === 'success') setLeaves(d.data); } catch (e) { if(!silent) showToast("Sync Error", "error"); } finally { if (!silent) setIsLoading(false); } };
           
-          // NEW: Fetch Holidays
-          const fetchHolidays = async () => { try { const r = await fetch(scriptUrl + "?action=holidays"); const d = await r.json(); if (d.status === 'success') setHolidays(d.data); } catch (e) {} };
+          // NEW: Fetch Holidays with FILTER
+          const fetchHolidays = async () => { 
+              try { 
+                  const r = await fetch(scriptUrl + "?action=holidays"); 
+                  const d = await r.json(); 
+                  if (d.status === 'success') {
+                      // Filter out anything that has a 'leaveType' property, which indicates it's actually a Leave Request
+                      // This protects the view if the backend returns the wrong data
+                      const cleanHolidays = d.data.filter(item => !item.leaveType && item.date);
+                      setHolidays(cleanHolidays); 
+                  }
+              } catch (e) {} 
+          };
 
           // NEW: Add Holiday
           const handleAddHoliday = async (e) => {
@@ -603,12 +614,8 @@ function setup() {
                           
                           {isSuperAdmin && <SidebarLink id="hr_inbox" icon={Briefcase} label={txt.admin_requests} active={activeTab} set={setActiveTab} />}
 
-                          {(currentUser.role === 'user' || isDeptAdmin) && (
-                              <>
-                                <SidebarLink id="apply_self" icon={Send} label={txt.apply} active={activeTab} set={() => setActiveTab('dashboard_self')} />
-                                <SidebarLink id="history" icon={List} label={txt.history} active={activeTab} set={setActiveTab} />
-                              </>
-                          )}
+                          {isDeptAdmin && <SidebarLink id="apply_self" icon={Send} label={txt.apply} active={activeTab} set={() => setActiveTab('dashboard_self')} />}
+                          {(currentUser.role === 'user' || isDeptAdmin) && <SidebarLink id="history" icon={List} label={txt.history} active={activeTab} set={setActiveTab} />}
                           
                           {/* PUBLIC HOLIDAYS (Everyone) */}
                           <SidebarLink id="holidays" icon={Palmtree} label={txt.public_holidays} active={activeTab} set={setActiveTab} />
@@ -1167,7 +1174,7 @@ function setup() {
                         {/* Only show HR Inbox for Super Admin on Mobile */}
                         {isSuperAdmin && <NavBtn id="hr_inbox" icon={Briefcase} label="HR" active={activeTab} set={setActiveTab} />}
                         {(currentUser.role === 'user' || isDeptAdmin) && <NavBtn id="history" icon={List} label={txt.history} active={activeTab} set={setActiveTab} />}
-                        {(currentUser.role === 'user' || isDeptAdmin) && <NavBtn id="apply_self" icon={Send} label="Self" active={activeTab} set={() => setActiveTab('dashboard_self')} />}
+                        {isDeptAdmin && <NavBtn id="apply_self" icon={Send} label="Self" active={activeTab} set={() => setActiveTab('dashboard_self')} />}
                         {isSuperAdmin && <NavBtn id="users" icon={Users} label={txt.team} active={activeTab} set={setActiveTab} />}
                         {/* Mobile Manage Holiday Link if Admin, but usually minimal nav */}
                         {isSuperAdmin && <NavBtn id="manage_holidays" icon={Calendar} label="Holidays" active={activeTab} set={setActiveTab} />}
