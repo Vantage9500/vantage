@@ -99,7 +99,6 @@ function doPost(e) {
         if (String(users[i][1]).toLowerCase() === String(data.email).toLowerCase()) return response({status: 'error', message: 'Email already registered'});
       }
       const isActive = data.action === "add_user" ? true : false;
-      // Set Email_Notifications to FALSE by default (Column 10)
       sheet.appendRow([data.name, String(data.email).toLowerCase(), data.password, data.role || "user", data.department || "Unassigned", 
         data.earned||15, data.sick||10, data.personalPaid||5, data.personalUnpaid||5, false, isActive, false
       ]);
@@ -191,10 +190,8 @@ function doGet(e) {
 
   if (action === "users") {
     const sheet = ss.getSheetByName(SHEET_USERS); const rows = sheet.getDataRange().getValues(); rows.shift();
-    // Default emailEnabled to FALSE if empty/undefined
     return response({status: 'success', data: rows.map(r => ({ name: r[0], email: r[1], password: r[2], role: r[3], department: r[4], limits: { earned: r[5]||15, sick: r[6]||10, personalPaid: r[7]||5, personalUnpaid: r[8]||5 }, emailEnabled: r[9]===""?false:r[9], isActive: r[10]===""?true:r[10], isDeleted: r[11]===true }))});
   }
-  // NEW: GET HOLIDAYS
   if (action === "holidays") {
     const sheet = ss.getSheetByName(SHEET_HOLIDAYS); 
     if(!sheet) return response({status:'success', data:[]});
@@ -215,8 +212,6 @@ function setup() {
   const h = ["Name", "Email", "Password", "Role", "Department", "Earned_Quota", "Sick_Quota", "Personal_Paid_Quota", "Personal_Unpaid_Quota", "Email_Notifications", "Is_Active", "Is_Deleted"];
   if (!us) { us = ss.insertSheet(SHEET_USERS); us.appendRow(h); us.appendRow(["Super Admin", "admin@company.com", "admin123", "admin", "All", 99, 99, 99, 99, false, true, false]); } 
   else { us.getRange(1, 1, 1, h.length).setValues([h]); }
-  
-  // NEW: HOLIDAYS SHEET
   let hs = ss.getSheetByName(SHEET_HOLIDAYS);
   if (!hs) { hs = ss.insertSheet(SHEET_HOLIDAYS); hs.appendRow(["ID", "Date", "Name", "Added By"]); }
 }
@@ -380,7 +375,11 @@ function setup() {
                 fetchLeaves();
                 fetchHolidays(); // Load holidays
                 if (currentUser?.role === 'admin') fetchUsersList();
-                const interval = setInterval(() => { fetchLeaves(true); fetchHolidays(); }, 15000);
+                const interval = setInterval(() => { 
+                    fetchLeaves(true); 
+                    fetchHolidays(); 
+                    if (currentUser?.role === 'admin') fetchUsersList(); // Auto refresh user list for admins too
+                }, 15000);
                 return () => clearInterval(interval);
             }
           }, [view, scriptUrl, currentUser]);
@@ -465,6 +464,23 @@ function setup() {
                   setNewHoliday({ name: '', date: '' });
                   fetchHolidays();
               } catch(e) { showToast("Failed to add", "error"); } finally { setIsLoading(false); }
+          };
+
+          // NEW: Manual Refresh
+          const handleManualRefresh = async () => {
+              setIsLoading(true);
+              try {
+                  await Promise.all([
+                      fetchLeaves(true), // Call fetch but don't trigger the 'Processing' loading spinner inside
+                      fetchHolidays(),
+                      (currentUser?.role === 'admin' ? fetchUsersList() : Promise.resolve())
+                  ]);
+                  showToast("Data Refreshed");
+              } catch(e) {
+                  showToast("Refresh failed", "error");
+              } finally {
+                  setIsLoading(false);
+              }
           };
 
           const handleLogin = async (e) => {
@@ -689,6 +705,11 @@ function setup() {
                           <p className="text-xs text-slate-500">{getGreeting()}, {currentUser.name.split(' ')[0]}</p>
                       </div>
                       <div className="flex items-center gap-4">
+                          {/* REFRESH BUTTON (DESKTOP) */}
+                          <button onClick={handleManualRefresh} className="p-2.5 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all text-slate-500 group" title="Refresh Data">
+                              <RefreshCw size={20} className={isLoading ? "animate-spin text-vantage-600" : "group-hover:text-vantage-600"}/>
+                          </button>
+
                           {currentUser.role === 'user' && <button onClick={() => setShowPasswordModal(true)} className="p-2.5 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all text-slate-500"><Settings size={20}/></button>}
                           <div className="relative">
                               <button onClick={() => {setShowNotifPanel(!showNotifPanel); if(inAppNotifs.filter(n=>!n.read).length) setInAppNotifs(inAppNotifs.map(n=>({...n, read:true})))}} className="p-2.5 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all text-slate-500"><Bell size={20} />{inAppNotifs.some(n=>!n.read) && <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white"></span>}</button>
@@ -860,12 +881,11 @@ function setup() {
                                 {allUsers.length > 0 && (
                                     <>
                                         {/* PENDING USERS SECTION */}
-                                        {allUsers.filter(u => u.role === 'user' && u.isActive === false && !u.isDeleted).length > 0 && (
+                                        {allUsers.filter(u => u.isActive === false && !u.isDeleted).length > 0 && (
                                             <div className="mb-6">
                                                 <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider mb-3 flex items-center gap-1.5"><AlertCircle size={12}/> Pending Approval</h3>
                                                 <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-                                                {allUsers.filter(u => u.role === 'user' && u.isActive === false && !u.isDeleted).map((user, idx) => {
-                                                    const totalTaken = calculateUserTakenLeaves(user.email);
+                                                {allUsers.filter(u => u.isActive === false && !u.isDeleted).map((user, idx) => {
                                                     return (
                                                         <div key={idx} className="p-4 rounded-[1.25rem] shadow-sm border border-amber-200 bg-amber-50 flex justify-between items-center">
                                                             <div>
@@ -887,12 +907,16 @@ function setup() {
                                         <div>
                                             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1">Active Team</h3>
                                             <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-                                            {allUsers.filter(u => u.role === 'user' && u.isActive !== false && !u.isDeleted).map((user, idx) => {
+                                            {allUsers.filter(u => (u.role === 'user' || (u.role === 'admin' && u.department !== 'All')) && u.isActive !== false && !u.isDeleted).map((user, idx) => {
                                                 const totalTaken = calculateUserTakenLeaves(user.email);
+                                                const isDeptAdminUser = user.role === 'admin';
                                                 return (
                                                     <div key={idx} className="p-4 rounded-[1.25rem] shadow-sm border border-slate-100 bg-white flex justify-between items-center hover:shadow-md transition-shadow">
                                                         <div>
-                                                            <div className="font-bold text-slate-800 text-sm">{user.name}</div>
+                                                            <div className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                                                {user.name}
+                                                                {isDeptAdminUser && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border border-indigo-100">Admin</span>}
+                                                            </div>
                                                             <div className="text-[10px] text-slate-500 mb-1">{user.email}</div>
                                                             <div className="text-[9px] font-bold text-emerald-600 mb-2 bg-emerald-50 inline-block px-2 py-0.5 rounded border border-emerald-100">Total Taken: {totalTaken} Days</div>
                                                             <div className="flex gap-2 text-[9px] font-bold flex-wrap max-w-[200px]">
@@ -927,13 +951,16 @@ function setup() {
                                </div>
                             </div>
                             <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-                                {allUsers.length === 0 ? <div className="text-center text-slate-400 mt-10 text-xs col-span-2">Loading...</div> : allUsers.filter(u => u.role === 'user').map((user, idx) => {
+                                {allUsers.length === 0 ? <div className="text-center text-slate-400 mt-10 text-xs col-span-2">Loading...</div> : allUsers.filter(u => (u.role === 'user' || (u.role === 'admin' && u.department !== 'All'))).map((user, idx) => {
                                     const stats = calculateUserLeaveBreakdown(user.email);
                                     return (
                                         <div key={idx} className="bg-white p-4 rounded-[1.25rem] shadow-sm border border-slate-100 mb-3 flex flex-col gap-3">
                                             <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                                                 <div>
-                                                    <div className="font-bold text-slate-800 text-sm">{user.name}</div>
+                                                    <div className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                                        {user.name}
+                                                        {user.role === 'admin' && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border border-indigo-100">Admin</span>}
+                                                    </div>
                                                     <div className="text-[10px] text-slate-500">{user.email}</div>
                                                 </div>
                                                 <div className="text-xs font-bold bg-slate-100 px-2 py-1 rounded-lg text-slate-600">Total: {stats.Total}</div>
@@ -1046,6 +1073,83 @@ function setup() {
                                 </div>
 
                                 <div className="flex gap-2 mt-6"><button onClick={() => setEditingUser(null)} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button><button onClick={handleUpdateUser} disabled={isLoading} className="flex-1 py-3 bg-vantage-900 text-white rounded-xl font-bold text-xs shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-colors">{isLoading ? 'Saving...' : 'Save Changes'}</button></div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* NEW: ADD USER MODAL */}
+                    {showAddUserModal && (
+                        <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+                            <form onSubmit={handleAddUser} className="bg-white w-full max-w-md rounded-[1.5rem] p-6 shadow-2xl animate-fadeIn border border-white/20 max-h-[90vh] overflow-y-auto no-scrollbar">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="flex items-center gap-2">
+                                        <div className="p-2 bg-vantage-50 rounded-lg text-vantage-600"><UserPlus size={18}/></div>
+                                        <h3 className="text-lg font-bold text-slate-800">Add New Employee</h3>
+                                    </div>
+                                    <button type="button" onClick={() => setShowAddUserModal(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><XSquare size={18}/></button>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Full Name</label><input required type="text" value={newUser.name} onChange={(e) => setNewUser({...newUser, name: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500" placeholder="Jane Doe"/></div>
+                                        <div><label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Work Email</label><input required type="email" value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500" placeholder="jane@vantage.com"/></div>
+                                    </div>
+                                    <div><label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Initial Password</label><input required type="password" value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500" placeholder="Secure initial password"/></div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Role</label>
+                                            <select value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500">
+                                                <option value="user">Employee</option>
+                                                <option value="admin">Manager/Head</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Department</label>
+                                            <select value={newUser.department} onChange={(e) => setNewUser({...newUser, department: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:border-vantage-500">
+                                                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 pt-2 border-t border-slate-100">Initial Leave Quotas</p>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        <div><label className="text-[9px] text-slate-400">Earned</label><input type="number" value={newUser.earned} onChange={(e) => setNewUser({...newUser, earned: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
+                                        <div><label className="text-[9px] text-slate-400">Sick</label><input type="number" value={newUser.sick} onChange={(e) => setNewUser({...newUser, sick: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
+                                        <div><label className="text-[9px] text-slate-400">P.Paid</label><input type="number" value={newUser.personalPaid} onChange={(e) => setNewUser({...newUser, personalPaid: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
+                                        <div><label className="text-[9px] text-slate-400">P.Unpaid</label><input type="number" value={newUser.personalUnpaid} onChange={(e) => setNewUser({...newUser, personalUnpaid: e.target.value})} className="w-full p-2 bg-slate-50 border rounded-lg text-xs text-center" min="0"/></div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2 mt-6">
+                                    <button type="button" onClick={() => setShowAddUserModal(false)} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button>
+                                    <button type="submit" disabled={isLoading} className="flex-1 py-3 bg-vantage-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-vantage-500/20 hover:bg-vantage-600 transition-colors flex items-center justify-center gap-2">{isLoading ? <><RefreshCw className="animate-spin" size={14}/> Adding...</> : 'Confirm & Add User'}</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+
+                    {/* PASSWORD CHANGE MODAL */}
+                    {showPasswordModal && (
+                        <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+                            <div className="bg-white w-full max-w-xs rounded-[1.5rem] p-6 shadow-2xl animate-fadeIn border border-white/20">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="p-2 bg-vantage-50 rounded-lg text-vantage-600"><Key size={16}/></div>
+                                    <h3 className="text-base font-bold text-slate-800">Change Password</h3>
+                                </div>
+                                <p className="text-xs text-slate-500 mb-4">Enter your new password below:</p>
+                                <input 
+                                    type="password" 
+                                    value={newPassword} 
+                                    onChange={(e) => setNewPassword(e.target.value)} 
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm mb-6 focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none" 
+                                    placeholder="New Password"
+                                />
+                                <div className="flex gap-2">
+                                    <button onClick={() => {setShowPasswordModal(false); setNewPassword('');}} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button>
+                                    <button onClick={handleChangePassword} disabled={isLoading} className="flex-1 py-3 bg-vantage-900 text-white rounded-xl font-bold text-xs shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-colors">{isLoading ? 'Updating...' : 'Update'}</button>
+                                </div>
                             </div>
                         </div>
                     )}
