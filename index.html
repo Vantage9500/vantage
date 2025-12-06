@@ -42,7 +42,7 @@
         import { 
           Calendar, User, Send, CheckCircle, XCircle, Settings, AlertCircle, LogOut, Shield, List, 
           RefreshCw, Clock, ChevronRight, Lock, PieChart, Activity, Filter, Building2, Briefcase, 
-          Users, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, UserMinus, UserPlus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw, FileText, Code, Copy, Globe, Palmtree
+          Users, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, UserMinus, UserPlus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw, FileText, Code, Copy, Globe, Palmtree, UserX
         } from 'lucide-react';
 
         // Embedded Google Apps Script Code (UPDATED WITH 0 VALUE FIXES)
@@ -173,6 +173,22 @@ function doPost(e) {
       }
       return response({status: 'error', message: 'ID not found'});
     }
+    else if (data.action === "cancel_leave") { // NEW: Handle Leave Cancellation
+      const sheet = ss.getSheetByName(SHEET_LEAVES);
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        // Check ID and ensure it's still Pending
+        if (rows[i][0] == data.id && rows[i][9] === 'Pending') {
+          sheet.getRange(i + 1, 10).setValue("Cancelled");
+          // Optionally notify admins/user (for now, only user email template is simple)
+          sendEmailToUser(rows[i][3], rows[i][2], "Cancelled", "Your request was cancelled by the user.");
+          return response({status: 'success', message: 'Cancelled'});
+        } else if (rows[i][0] == data.id && rows[i][9] !== 'Pending') {
+           return response({status: 'error', message: 'Only pending leaves can be cancelled.'});
+        }
+      }
+      return response({status: 'error', message: 'ID not found'});
+    }
     else if (data.action === "update_user_quota") {
       const sheet = ss.getSheetByName(SHEET_USERS);
       const rows = sheet.getDataRange().getValues();
@@ -269,6 +285,7 @@ function setup() {
                 pending: "Pending",
                 approved: "Approved",
                 rejected: "Rejected",
+                cancelled: "Cancelled", // NEW translation
                 holiday_name: "Holiday Name",
                 holiday_date: "Holiday Date",
                 add_holiday: "Add Holiday",
@@ -303,6 +320,7 @@ function setup() {
                 pending: "En attente",
                 approved: "Approuvé",
                 rejected: "Rejeté",
+                cancelled: "Annulé", // NEW translation
                 holiday_name: "Nom du jour férié",
                 holiday_date: "Date",
                 add_holiday: "Ajouter Férié",
@@ -327,7 +345,8 @@ function setup() {
           const [holidays, setHolidays] = useState([]); // NEW State
           
           const [showArchive, setShowArchive] = useState(false);
-          const [scriptUrl, setScriptUrl] = useState('https://script.google.com/macros/s/AKfycbwIJu69RwsIf9ogs2FAfUUycJdCg34C7GksK28OmzUImvmYk5Bp-nx3hZB1SRDkUcWX/exec');
+          // *** USING THE LATEST PROVIDED URL ***
+          const [scriptUrl, setScriptUrl] = useState('https://script.google.com/macros/s/AKfycbxZSZpKr8hJ1gViXQjyoaUN5xtrNjFJss3rKdIA4D3gMXXIL50l6eFJrbT4lIuRG7JK/exec');
           
           const [isLoading, setIsLoading] = useState(false);
           const [notification, setNotification] = useState(null);
@@ -358,6 +377,13 @@ function setup() {
           
           // NEW Holiday Form Data
           const [newHoliday, setNewHoliday] = useState({ name: '', date: '' });
+
+          // NEW STATES FOR BACKEND ACCESS CONTROL
+          const [showBackendConfig, setShowBackendConfig] = useState(false);
+          const [showBackendPasswordModal, setShowBackendPasswordModal] = useState(false);
+          const [backendPasswordInput, setBackendPasswordInput] = useState('');
+          const [isVerifying, setIsVerifying] = useState(false);
+
 
           const getGreeting = () => {
             const hour = new Date().getHours();
@@ -505,6 +531,43 @@ function setup() {
               }
           };
 
+          // NEW: Backend Unlock Handler
+          const handleBackendUnlock = async (e) => {
+            e.preventDefault();
+            if (!backendPasswordInput) return;
+            setIsVerifying(true);
+            try {
+                // Use the same mechanism as login to check credentials against the spreadsheet data
+                const r = await fetch(scriptUrl + "?action=users"); 
+                const d = await r.json();
+                
+                if (d.status === 'success') {
+                    // Check if the current logged-in user's email matches the entered password
+                    const u = d.data.find(u => 
+                        String(u.email).toLowerCase() === String(currentUser.email).toLowerCase() && 
+                        String(u.password) === String(backendPasswordInput) && 
+                        u.role === 'admin' // Ensure it's still an admin account
+                    );
+                    
+                    if (u) {
+                        setShowBackendConfig(true);
+                        setShowBackendPasswordModal(false);
+                        setBackendPasswordInput('');
+                        showToast("Backend unlocked!");
+                    } else {
+                        showToast("Incorrect Password for Super Admin.", "error");
+                    }
+                } else {
+                    showToast("Database Error during verification", "error");
+                }
+            } catch (error) { 
+                showToast("Connection Failed during verification", "error"); 
+            } finally { 
+                setIsVerifying(false); 
+            }
+          };
+
+
           const handleLogin = async (e) => {
             e.preventDefault(); setIsLoginLoading(true);
             if (!scriptUrl) { showToast("Database URL missing.", "error"); setIsLoginLoading(false); return; }
@@ -534,10 +597,45 @@ function setup() {
                 }
                 await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'register', name, email: email.toLowerCase(), password }) });
                 showToast("Signup Successful! Wait for Admin approval."); setView('login'); setName(''); setEmail(''); setPassword('');
-            } catch (e) { showToast("Signup Request Failed", "error"); } finally { setIsLoginLoading(false); }
+            } catch (e) { showToast("Signup Request Failed", "error"); } finally { setIsLoading(false); }
           };
 
-          // ... (Keep existing toggles and update functions: toggleEmailNotifications, handleUpdateUser, handleUserStatusChange, handleChangePassword, handleLogout, handleApply, initiateAdminAction, confirmAdminAction, handleSaveAllocation, handleAddUser, openAllocationModal, getFilteredLeavesForAdmin, copyToClipboard)
+          // --- FIX FOR 405 PREFLIGHT ERROR: REMOVING HEADERS ---
+          const handleCancelLeave = async (id) => {
+              if (window.confirm("Are you sure you want to cancel this leave request? This action cannot be undone.")) {
+                  setIsLoading(true);
+                  console.log('Attempting to cancel leave ID:', id, 'using URL:', scriptUrl);
+                  try {
+                      // Removed headers: {'Content-Type': 'application/json'} to bypass 405 Preflight check
+                      const r = await fetch(scriptUrl, { 
+                          method: 'POST', 
+                          body: JSON.stringify({ action: 'cancel_leave', id: id }) 
+                      });
+                      
+                      if (!r.ok) {
+                         console.error('Fetch response was not ok:', r.status, r.statusText);
+                         throw new Error(`Server returned status: ${r.status}`);
+                      }
+
+                      const d = await r.json();
+                      console.log('Backend response:', d);
+
+                      if (d.status === 'success') {
+                          showToast("Leave Request Cancelled!");
+                          setLeaves(prevLeaves => prevLeaves.map(l => l.id === id ? { ...l, status: 'Cancelled' } : l));
+                      } else {
+                          showToast(d.message || "Cancellation failed. Check Console for details.", "error");
+                      }
+                  } catch (error) { 
+                      console.error('Cancellation Error:', error);
+                      showToast("Network Error: Could not reach backend script. Ensure the Apps Script URL is correct and deployed.", "error"); 
+                  } finally { 
+                      setIsLoading(false); 
+                  }
+              }
+          };
+          // ------------------------------------
+
           const toggleEmailNotifications = async () => {
               const newState = !emailEnabled; setEmailEnabled(newState);
               try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'toggle_email_pref', email: currentUser.email, enabled: newState }) }); showToast(newState ? "Email Alerts ON" : "Email Alerts OFF"); } catch(e) { setEmailEnabled(!newState); showToast("Failed to update preference", "error"); }
@@ -566,7 +664,31 @@ function setup() {
           const handleLogout = () => { setCurrentUser(null); setView('login'); setEmail(''); setPassword(''); setInAppNotifs([]); };
           const handleApply = async (e) => { e.preventDefault(); const days = getDaysDiff(formData.startDate, formData.endDate); const stats = getLeaveStats(); const limit = currentUser.limits ? (formData.leaveType === 'Earned' ? currentUser.limits.earned : formData.leaveType === 'Sick' ? currentUser.limits.sick : formData.leaveType === 'Personal Paid' ? currentUser.limits.personalPaid : currentUser.limits.personalUnpaid) : DEFAULT_LIMITS[formData.leaveType]; const used = stats[formData.leaveType] || 0; if (used + days > limit) return showToast(`Insufficient Balance! Limit: ${limit}`, 'error'); setIsLoading(true); try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'apply', id: 'L' + Date.now(), name: currentUser.name, email: currentUser.email, department: currentUser.department, ...formData }) }); setFormData({ ...formData, reason: '', startDate: '', endDate: '' }); setActiveTab('history'); showToast("Application Sent!"); fetchLeaves(true); } catch (error) { showToast("Network Error", "error"); } finally { setIsLoading(false); } };
           const initiateAdminAction = (id, status) => { setActionModal({ id, status }); setAdminMessage(''); };
-          const confirmAdminAction = async () => { if (!actionModal) return; setLeaves(leaves.map(l => l.id === actionModal.id ? { ...l, status: actionModal.status, adminMessage } : l)); setActionModal(null); try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: actionModal.id, status: actionModal.status, message: adminMessage }) }); showToast(`Request ${actionModal.status}`); } catch (e) { showToast("Failed to sync", "error"); } };
+          const confirmAdminAction = async () => { 
+              if (!actionModal) return; 
+              
+              let action = 'update';
+              if (actionModal.status === 'Cancelled') {
+                  // If admin uses the cancel action in the new modal, treat it as a direct cancel
+                  await handleCancelLeave(actionModal.id);
+                  setActionModal(null);
+                  return;
+              }
+
+              setLeaves(leaves.map(l => l.id === actionModal.id ? { ...l, status: actionModal.status, adminMessage } : l)); 
+              setActionModal(null); 
+              try { 
+                  await fetch(scriptUrl, { 
+                      method: 'POST', 
+                      mode: 'no-cors', 
+                      headers: { 'Content-Type': 'application/json' }, 
+                      body: JSON.stringify({ action: 'update', id: actionModal.id, status: actionModal.status, message: adminMessage }) 
+                  }); 
+                  showToast(`Request ${actionModal.status}`); 
+              } catch (e) { 
+                  showToast("Failed to sync", "error"); 
+              } 
+          };
           const handleSaveAllocation = async () => { if(!editingUser) return; setIsLoading(true); try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_user_quota', email: editingUser.email, ...allocations }) }); showToast("Quotas Updated!"); setAllUsers(allUsers.map(u => u.email === editingUser.email ? {...u, limits: allocations} : u)); setEditingUser(null); } catch (e) { showToast("Update Failed", "error"); } finally { setIsLoading(false); } };
           const handleAddUser = async (e) => { e.preventDefault(); if(!newUser.name || !newUser.email || !newUser.password) return showToast("Fill Name, Email, and Password.", "error"); setIsLoading(true); try { await fetch(scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_user', ...newUser, email: newUser.email.toLowerCase(), earned: Number(newUser.earned), sick: Number(newUser.sick), personalPaid: Number(newUser.personalPaid), personalUnpaid: Number(newUser.personalUnpaid) }) }); showToast("User Added Successfully!"); setShowAddUserModal(false); fetchUsersList(); setNewUser({ name: '', email: '', password: '', role: 'user', department: DEPARTMENTS[0], earned: 15, sick: 10, personalPaid: 5, personalUnpaid: 5 }); } catch (e) { showToast("Failed to add user", "error"); } finally { setIsLoading(false); } };
           const openAllocationModal = (user) => { setEditingUser(user); const limits = user.limits || {}; setAllocations({ earned: limits.earned !== undefined ? limits.earned : 15, sick: limits.sick !== undefined ? limits.sick : 10, personalPaid: limits.personalPaid !== undefined ? limits.personalPaid : 5, personalUnpaid: limits.personalUnpaid !== undefined ? limits.personalUnpaid : 5 }); setEditUserRole(user.role); setEditUserDept(user.department); setEditUserActive(user.isActive); };
@@ -576,7 +698,65 @@ function setup() {
           // --- UI Components ---
           const BalanceCard = ({ type, used, total, icon: Icon, colorClass, bgClass, barClass }) => { const remaining = total - used; const percent = Math.min((used / total) * 100, 100); return ( <div className="bg-white p-4 rounded-[1.5rem] shadow-soft border border-slate-100 relative overflow-hidden group min-w-[130px] md:min-w-0 shrink-0 snap-center"> <div className={`absolute -right-3 -top-3 p-2 opacity-5 ${colorClass} transform scale-125`}><Icon size={60} /></div> <div className="flex justify-between items-start mb-3 relative z-10"> <div> <div className={`h-8 w-8 rounded-xl flex items-center justify-center mb-2 ${bgClass} ${colorClass}`}><Icon size={16} /></div> <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{type}</p> <h3 className="text-2xl font-extrabold text-slate-800 mt-0.5">{remaining}</h3> </div> </div> <div className="w-full bg-slate-100 rounded-full h-1 mt-1 overflow-hidden"><div className={`h-1 rounded-full ${barClass}`} style={{ width: `${percent}%` }}></div></div> <p className="text-[9px] text-right mt-1.5 text-slate-400 font-medium">{used} / {total} Used</p> </div> ); };
           const AdminStatsCard = ({ title, value, icon: Icon, colorClass }) => ( <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3 flex-1 min-w-[120px]"> <div className={`p-2.5 rounded-xl ${colorClass} bg-opacity-10`}><Icon size={18} className={colorClass.replace('bg-', 'text-')}/></div> <div><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{title}</p><h3 className="text-xl font-bold text-slate-800">{value}</h3></div> </div> );
-          const LeaveCard = ({ leave, isAdmin }) => ( <div className="bg-white p-4 rounded-[1.25rem] shadow-soft border border-slate-100 mb-3 transition-all hover:shadow-md"> <div className="flex justify-between items-start mb-3"> <div className="flex gap-3 items-center"> <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold shadow-md shrink-0 ${leave.leaveType === 'Sick' ? 'bg-rose-500' : leave.leaveType === 'Earned' ? 'bg-emerald-500' : 'bg-indigo-500'}`}>{leave.name.charAt(0)}</div> <div><div className="font-bold text-slate-800 text-sm">{leave.name}</div><div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5"><span className="bg-slate-50 px-1.5 py-0.5 rounded-md">{leave.department}</span><span>{leave.leaveType}</span></div></div> </div> <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${leave.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : leave.status === 'Rejected' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>{txt[leave.status.toLowerCase()] || leave.status}</span> </div> <div className="pl-0.5"> <div className="flex items-center text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100"> <div className="flex-1"><div className="flex items-center gap-2 mb-1"><Calendar size={14} className="text-slate-400"/><span className="font-semibold text-slate-700">{formatDate(leave.startDate)} <span className="text-slate-400 mx-1 font-normal">to</span> {formatDate(leave.endDate)}</span></div>{leave.reason && <div className="text-slate-500 italic pl-6 text-[10px] line-clamp-1">"{leave.reason}"</div>}</div> <div className="text-right pl-3 border-l border-slate-200 ml-3"><span className="block font-extrabold text-lg text-vantage-600">{getDaysDiff(leave.startDate, leave.endDate)}</span><span className="text-[9px] uppercase text-slate-400 font-bold">Days</span></div> </div> {leave.adminMessage && <div className="mt-2 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100 flex items-start gap-2"><MessageSquare size={14} className="text-blue-500 mt-0.5 shrink-0"/><div><p className="text-[9px] text-blue-600 font-bold uppercase tracking-wide mb-0.5">Admin</p><p className="text-[11px] text-slate-700">"{leave.adminMessage}"</p></div></div>} {isAdmin && leave.status === 'Pending' && ( <div className="flex gap-2 mt-3"><button onClick={() => initiateAdminAction(leave.id, 'Rejected')} className="flex-1 py-2.5 bg-white border border-rose-100 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-50 flex items-center justify-center gap-2 transition-all shadow-sm"><XCircle size={14}/> Reject</button><button onClick={() => initiateAdminAction(leave.id, 'Approved')} className="flex-1 py-2.5 bg-vantage-500 text-white rounded-xl text-xs font-bold shadow-md hover:bg-vantage-600 flex items-center justify-center gap-2 transition-all"><CheckCircle size={14}/> Approve</button></div> )} </div> </div> );
+          const LeaveCard = ({ leave, isAdmin }) => {
+              const isRequestor = String(leave.email).toLowerCase() === String(currentUser.email).toLowerCase();
+              const canCancel = isRequestor && leave.status === 'Pending';
+              
+              let statusClass = 'bg-amber-50 text-amber-600 border-amber-100'; // Pending
+              if (leave.status === 'Approved') statusClass = 'bg-emerald-50 text-emerald-600 border-emerald-100';
+              else if (leave.status === 'Rejected') statusClass = 'bg-rose-50 text-rose-600 border-rose-100';
+              else if (leave.status === 'Cancelled') statusClass = 'bg-slate-100 text-slate-500 border-slate-200'; // NEW Cancelled style
+
+              return ( 
+              <div className="bg-white p-4 rounded-[1.25rem] shadow-soft border border-slate-100 mb-3 transition-all hover:shadow-md"> 
+                <div className="flex justify-between items-start mb-3"> 
+                  <div className="flex gap-3 items-center"> 
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold shadow-md shrink-0 ${leave.leaveType === 'Sick' ? 'bg-rose-500' : leave.leaveType === 'Earned' ? 'bg-emerald-500' : 'bg-indigo-500'}`}>{leave.name.charAt(0)}</div> 
+                    <div>
+                        <div className="font-bold text-slate-800 text-sm">{leave.name}</div>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
+                            <span className="bg-slate-50 px-1.5 py-0.5 rounded-md">{leave.department}</span>
+                            <span>{leave.leaveType}</span>
+                        </div>
+                    </div> 
+                  </div> 
+                  <span className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${statusClass}`}>{txt[leave.status.toLowerCase()] || leave.status}</span> 
+                </div> 
+                <div className="pl-0.5"> 
+                  <div className="flex items-center text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100"> 
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Calendar size={14} className="text-slate-400"/>
+                            <span className="font-semibold text-slate-700">{formatDate(leave.startDate)} <span className="text-slate-400 mx-1 font-normal">to</span> {formatDate(leave.endDate)}</span>
+                        </div>
+                        {leave.reason && <div className="text-slate-500 italic pl-6 text-[10px] line-clamp-1">"{leave.reason}"</div>}
+                    </div> 
+                    <div className="text-right pl-3 border-l border-slate-200 ml-3">
+                        <span className="block font-extrabold text-lg text-vantage-600">{getDaysDiff(leave.startDate, leave.endDate)}</span>
+                        <span className="text-[9px] uppercase text-slate-400 font-bold">Days</span>
+                    </div> 
+                  </div> 
+                  {leave.adminMessage && <div className="mt-2 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100 flex items-start gap-2"><MessageSquare size={14} className="text-blue-500 mt-0.5 shrink-0"/><div><p className="text-[9px] text-blue-600 font-bold uppercase tracking-wide mb-0.5">Admin</p><p className="text-[11px] text-slate-700">"{leave.adminMessage}"</p></div></div>} 
+                  
+                  {/* ADMIN APPROVE/REJECT BUTTONS */}
+                  {isAdmin && leave.status === 'Pending' && ( 
+                      <div className="flex gap-2 mt-3">
+                          <button onClick={() => initiateAdminAction(leave.id, 'Rejected')} className="flex-1 py-2.5 bg-white border border-rose-100 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-50 flex items-center justify-center gap-2 transition-all shadow-sm"><XCircle size={14}/> Reject</button>
+                          <button onClick={() => initiateAdminAction(leave.id, 'Approved')} className="flex-1 py-2.5 bg-vantage-500 text-white rounded-xl text-xs font-bold shadow-md hover:bg-vantage-600 flex items-center justify-center gap-2 transition-all"><CheckCircle size={14}/> Approve</button>
+                      </div> 
+                  )} 
+
+                  {/* USER/ADMIN SELF CANCEL BUTTON */}
+                  {canCancel && (
+                      <div className={`mt-3 ${isAdmin ? 'block' : 'flex justify-end'}`}>
+                          <button onClick={() => handleCancelLeave(leave.id)} className={`py-2.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 flex items-center justify-center gap-2 transition-all shadow-sm ${isAdmin ? 'w-full' : 'px-4'}`}><UserX size={14}/> Cancel Request</button>
+                      </div>
+                  )}
+
+                </div> 
+              </div>
+            );
+          };
           const AdminFilterBtn = ({ label, count, active, onClick, activeBg }) => ( <button onClick={onClick} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all border flex flex-col items-center justify-center gap-0.5 ${active ? `${activeBg} text-white border-transparent shadow-md transform -translate-y-0.5` : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'}`}> <span>{label}</span><span className={`px-2 py-0.5 rounded-full text-[9px] ${active ? 'bg-white/20' : 'bg-slate-100 text-slate-600'}`}>{count}</span> </button> );
           const SidebarLink = ({ id, icon: Icon, label, active, set, action }) => ( <button onClick={() => action ? action() : set(id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${active === id && !action ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}> <Icon size={18} /> <span className="text-sm font-medium">{label}</span> </button> );
           const NavBtn = ({ id, icon: Icon, label, active, set, action, danger }) => ( <button onClick={() => action ? action() : set(id)} className={`flex flex-col items-center justify-center w-full h-full pt-0.5 transition-all duration-300 group relative ${active === id && !action ? 'text-vantage-600 -translate-y-0.5' : 'text-slate-400 hover:text-slate-600'}`}> <div className={`p-1.5 rounded-xl mb-0.5 transition-all duration-300 ${active === id && !action ? 'bg-vantage-50 shadow-sm scale-105' : 'bg-transparent group-hover:bg-slate-50'} ${danger ? 'hover:bg-rose-50 hover:text-rose-500' : ''}`}><Icon size={20} strokeWidth={active === id && !action ? 2.5 : 2} /></div> <span className="text-[9px] font-bold tracking-wide opacity-90">{label}</span> {active === id && !action && <span className="absolute -bottom-0.5 w-1 h-1 bg-vantage-600 rounded-full"></span>} </button> );
@@ -1070,25 +1250,41 @@ function setup() {
                         {/* SYSTEM CONFIG (ADMIN ONLY) */}
                         {isSuperAdmin && (
                             <div className="space-y-4">
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">System Configuration</h3>
+                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">System Configuration (Restricted)</h3>
                                 
-                                {/* BACKEND CODE DISPLAY */}
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                     <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="p-2 rounded-lg bg-vantage-100 text-vantage-600"><Code size={18}/></div>
-                                            <div><p className="text-xs font-bold text-slate-700">Backend Script</p><p className="text-[10px] text-slate-500">Google Apps Script Code.gs</p></div>
+                                {showBackendConfig ? (
+                                    <>
+                                        {/* BACKEND CODE DISPLAY (UNLOCKED) */}
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="p-2 rounded-lg bg-vantage-100 text-vantage-600"><Code size={18}/></div>
+                                                    <div><p className="text-xs font-bold text-slate-700">Backend Script</p><p className="text-[10px] text-slate-500">Google Apps Script Code.gs</p></div>
+                                                </div>
+                                                <button type="button" onClick={copyToClipboard} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"><Copy size={12}/> Copy Code</button>
+                                            </div>
+                                            <div className="relative">
+                                                <textarea readOnly value={APPS_SCRIPT_TEMPLATE} className="w-full h-32 p-3 bg-slate-800 text-slate-300 font-mono text-[10px] rounded-xl outline-none resize-y border border-slate-700" spellCheck="false"></textarea>
+                                            </div>
                                         </div>
-                                        <button type="button" onClick={copyToClipboard} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"><Copy size={12}/> Copy Code</button>
-                                     </div>
-                                     <div className="relative">
-                                         <textarea readOnly value={APPS_SCRIPT_TEMPLATE} className="w-full h-32 p-3 bg-slate-800 text-slate-300 font-mono text-[10px] rounded-xl outline-none resize-y border border-slate-700" spellCheck="false"></textarea>
-                                     </div>
-                                </div>
 
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1 tracking-wider">Apps Script URL</label>
-                                <input value={scriptUrl} onChange={(e) => setScriptUrl(e.target.value)} placeholder="https://script.google.com/..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs mb-4 focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 outline-none transition-all text-slate-600"/>
-                                <button onClick={() => { localStorage.setItem('google_script_url_v2', scriptUrl); showToast("Saved Successfully"); fetchLeaves(); }} className="w-full bg-vantage-900 text-white py-3.5 rounded-xl font-bold text-xs shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-all">Save Connection</button>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1 tracking-wider">Apps Script URL</label>
+                                        <input value={scriptUrl} onChange={(e) => setScriptUrl(e.target.value)} placeholder="https://script.google.com/..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs mb-4 focus:ring-2 focus:ring-vantage-100 focus:border-vantage-500 outline-none transition-all text-slate-600"/>
+                                        <button onClick={() => { localStorage.setItem('google_script_url_v2', scriptUrl); showToast("Saved Successfully"); fetchLeaves(); }} className="w-full bg-vantage-900 text-white py-3.5 rounded-xl font-bold text-xs shadow-lg shadow-vantage-900/20 hover:bg-vantage-800 transition-all">Save Connection</button>
+                                        
+                                        <button onClick={() => setShowBackendConfig(false)} className="w-full text-center text-xs font-medium text-slate-400 mt-2 hover:text-rose-500 transition-colors">Click to Hide Backend</button>
+                                    </>
+                                ) : (
+                                    /* UNLOCK BUTTON (LOCKED) */
+                                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                                        <div className="p-3 bg-rose-50/50 rounded-xl mx-auto w-12 h-12 flex items-center justify-center mb-3 text-rose-600 border border-rose-100"><Shield size={24}/></div>
+                                        <p className="text-sm font-bold text-slate-800 mb-2">Restricted Access</p>
+                                        <p className="text-xs text-slate-500 mb-4">You must enter your login password to view the backend script and URL.</p>
+                                        <button onClick={() => setShowBackendPasswordModal(true)} className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-500/20 hover:bg-rose-600 active:scale-95 transition-all mx-auto">
+                                            <Lock size={14}/> Unlock Configuration
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                       </div>
@@ -1105,7 +1301,7 @@ function setup() {
                                     <div className={`p-2 rounded-lg ${actionModal.status === 'Approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                         {actionModal.status === 'Approved' ? <CheckCircle size={16}/> : <XCircle size={16}/>}
                                     </div>
-                                    <h3 className="text-base font-bold text-slate-800">Confirm {actionModal.status === 'Approved' ? 'Approval' : 'Rejection'}</h3>
+                                    <h3 className="text-base font-bold text-slate-800">Confirm {actionModal.status === 'Approved' ? 'Approval' : actionModal.status === 'Rejected' ? 'Rejection' : 'Action'}</h3>
                                 </div>
                                 <p className="text-xs text-slate-500 mb-4">Add an optional message for the employee:</p>
                                 <textarea 
@@ -1117,7 +1313,7 @@ function setup() {
                                 />
                                 <div className="flex gap-2">
                                     <button onClick={() => setActionModal(null)} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button>
-                                    <button onClick={confirmAdminAction} className={`flex-1 py-3 text-white rounded-xl font-bold text-xs shadow-lg transition-colors ${actionModal.status === 'Approved' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' : 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'}`}>Confirm</button>
+                                    <button onClick={confirmAdminAction} disabled={isLoading} className={`flex-1 py-3 text-white rounded-xl font-bold text-xs shadow-lg transition-colors ${actionModal.status === 'Approved' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' : 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'}`}>Confirm</button>
                                 </div>
                             </div>
                         </div>
@@ -1184,8 +1380,8 @@ function setup() {
                         </div>
                     )}
 
-                    {/* NEW: ADD USER MODAL */}
-                    {showAddUserModal && (
+                  {/* NEW: ADD USER MODAL */}
+                  {showAddUserModal && (
                         <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
                             <form onSubmit={handleAddUser} className="bg-white w-full max-w-md rounded-[1.5rem] p-6 shadow-2xl animate-fadeIn border border-white/20 max-h-[90vh] overflow-y-auto no-scrollbar">
                                 <div className="flex items-center justify-between mb-6">
@@ -1237,8 +1433,8 @@ function setup() {
                     )}
 
 
-                    {/* PASSWORD CHANGE MODAL */}
-                    {showPasswordModal && (
+                  {/* PASSWORD CHANGE MODAL */}
+                  {showPasswordModal && (
                         <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
                             <div className="bg-white w-full max-w-xs rounded-[1.5rem] p-6 shadow-2xl animate-fadeIn border border-white/20">
                                 <div className="flex items-center gap-2 mb-4">
@@ -1258,6 +1454,33 @@ function setup() {
                                     <button onClick={handleChangePassword} disabled={isLoading || !newPassword} className={`flex-1 py-3 rounded-xl font-bold text-xs shadow-lg transition-colors ${isLoading || !newPassword ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-vantage-900 text-white shadow-vantage-900/20 hover:bg-vantage-800'}`}>{isLoading ? 'Updating...' : 'Update'}</button>
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                  {/* NEW: BACKEND UNLOCK PASSWORD MODAL */}
+                  {showBackendPasswordModal && (
+                        <div className="fixed inset-0 bg-vantage-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+                            <form onSubmit={handleBackendUnlock} className="bg-white w-full max-w-xs rounded-[1.5rem] p-6 shadow-2xl animate-fadeIn border border-white/20">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="p-2 bg-rose-50 rounded-lg text-rose-600"><Shield size={16}/></div>
+                                    <h3 className="text-base font-bold text-slate-800">Verify Identity</h3>
+                                </div>
+                                <p className="text-xs text-slate-500 mb-4">Enter your login password to view the Super Admin settings.</p>
+                                <input 
+                                    type="password" 
+                                    value={backendPasswordInput} 
+                                    onChange={(e) => setBackendPasswordInput(e.target.value)} 
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm mb-6 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none" 
+                                    placeholder="Your Password"
+                                    required
+                                />
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => {setShowBackendPasswordModal(false); setBackendPasswordInput('');}} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">Cancel</button>
+                                    <button type="submit" disabled={isVerifying || !backendPasswordInput} className={`flex-1 py-3 rounded-xl font-bold text-xs shadow-lg transition-colors ${isVerifying || !backendPasswordInput ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-rose-500 text-white shadow-rose-500/20 hover:bg-rose-600'}`}>
+                                        {isVerifying ? 'Verifying...' : 'Unlock'}
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     )}
 
@@ -1288,4 +1511,3 @@ function setup() {
     </script>
 </body>
 </html>
-
