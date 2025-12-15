@@ -37,12 +37,12 @@
     <div id="root" class="h-full w-full"></div>
 
     <script type="text/babel" data-type="module">
-        import React, { useState, useEffect, useRef } from 'react';
+        import React, { useState, useEffect, ef } from 'react';
         import { createRoot } from 'react-dom/client';
         import { 
-          Calendar, User, Send, CheckCircle, XCircle, Settings, AlertCircle, LogOut, Shield, List, 
+          Calendar, , Send, CheckCircle, XCircle, Settings, AlertCircle, LogOut, Shield, List, 
           RefreshCw, Clock, ChevronRight, Lock, PieChart, Activity, Filter, Building2, Briefcase, 
-          Users, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, UserMinus, UserPlus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw, FileText, Code, Copy, Globe, Palmtree, UserX
+          s, Edit3, MessageSquare, Bell, Trash2, LayoutGrid, Hexagon, Key, DollarSign, Minus, Plus, Mail, CheckSquare, XSquare, UserCog, Archive, RotateCcw, FileText, Code, Copy, Globe, Palmtree, UserX
         } from 'lucide-react';
 
         // Embedded Google Apps Script Code (UPDATED WITH 0 VALUE FIXES)
@@ -784,7 +784,7 @@ function setup() {
                   <div className="p-8 pt-2">
                     <form onSubmit={handleSignup} className="space-y-4">
                         <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.fullname}</label><input type="text" required placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
-                        <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.email}</label><input type="email" required placeholder="User@vantagelogistics.ca" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
+                        <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.email}</label><input type="email" required placeholder="user@vantagelogistics.ca" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
                         <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.password}</label><input type="password" required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
                         
                         <button disabled={isLoginLoading} className="w-full bg-vantage-900 text-white py-4 rounded-xl font-bold text-sm shadow-xl shadow-vantage-900/20 hover:bg-vantage-800 hover:scale-[1.02] active:scale-95 transition-all mt-2 flex items-center justify-center gap-2">{isLoginLoading ? <RefreshCw className="animate-spin" size={20}/> : txt.signup_btn}</button>
@@ -1511,4 +1511,5 @@ function setup() {
     </script>
 </body>
 </html>
+
 
