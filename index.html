@@ -784,7 +784,7 @@ function setup() {
                   <div className="p-8 pt-2">
                     <form onSubmit={handleSignup} className="space-y-4">
                         <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.fullname}</label><input type="text" required placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
-                        <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.email}</label><input type="email" required placeholder="User@vantage.ca" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
+                        <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.email}</label><input type="email" required placeholder="User@vantage.com" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
                         <div className="space-y-1.5"><label className="text-xs font-bold text-slate-400 uppercase tracking-wide ml-1">{txt.password}</label><input type="password" required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-vantage-500 focus:border-vantage-500 outline-none text-sm transition-all text-slate-800 font-semibold placeholder:text-slate-400" /></div>
                         
                         <button disabled={isLoginLoading} className="w-full bg-vantage-900 text-white py-4 rounded-xl font-bold text-sm shadow-xl shadow-vantage-900/20 hover:bg-vantage-800 hover:scale-[1.02] active:scale-95 transition-all mt-2 flex items-center justify-center gap-2">{isLoginLoading ? <RefreshCw className="animate-spin" size={20}/> : txt.signup_btn}</button>
@@ -1511,6 +1511,7 @@ function setup() {
     </script>
 </body>
 </html>
+
 
 
 
